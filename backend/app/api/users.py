@@ -131,6 +131,7 @@ def delete_user(
     username = user.username
     db.delete(user)
     db.commit()
+    face_service.invalidate_embedding_cache()
     write_audit(db, "user_delete", f"Deleted user '{username}' (id={user_id})", user=admin)
     return {"detail": "User deleted"}
 
@@ -182,6 +183,7 @@ def upload_photo(
 
     db.commit()
     db.refresh(user)
+    face_service.invalidate_embedding_cache()
     write_audit(
         db,
         "user_photo_upload",

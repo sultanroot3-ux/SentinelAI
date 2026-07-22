@@ -14,6 +14,10 @@ opencv-python>=4.8,<5
 numpy
 # PostgreSQL driver (SQLite needs nothing extra)
 psycopg2-binary
+# Notifications + report exports
+requests
+reportlab
+openpyxl
 
 # --- Optional: real face recognition (512-d embeddings, buffalo_l model) ---
 # Install these to enable actual face matching; without them the backend falls

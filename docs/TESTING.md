@@ -72,12 +72,41 @@ Then close it with `PUT /api/cases/1` `{"status":"closed","resolution":"..."}`.
 - macOS: `available: false` + log line *"not authorized to capture video"*
   means the terminal app lacks camera permission (see INSTALL.md §3).
 
-## 6. Liveness (temporal)
+## 6. Liveness (blink + motion + head pose)
 
-Enable `liveness_enabled` in Settings, open the AI-overlay stream, and hold a
-printed photo in front of the camera: after ~1 s of frames it should be
-flagged (rigid motion). A live face passes. Single-frame API calls always
-report `method: "single-frame"` — they have no temporal context.
+The `LivenessMonitor` combines three temporal signals on the AI-overlay
+stream: blink detection (eye-openness from the 106-point landmarks — left eye
+contour indices 33–42, right 87–96, verified empirically), non-rigid keypoint
+motion, and head-pose micro-variation (pitch/yaw/roll std). Verdict = live if
+a blink is seen OR both motion signals exceed threshold.
+
+Automated check (synthetic sequences — static photo, handheld photo, live
+face with blink):
+
+```bash
+backend/.venv/bin/python <scratch>/test_liveness.py   # all 3 scenarios PASS
+```
+
+Manual check: enable `liveness_enabled` in Settings, open the AI-overlay
+stream, hold a printed photo in front of the camera — it is flagged within
+~2 s (no blink, rigid motion). A live face passes on the first blink.
+Single-frame API calls report `method: "single-frame"` (no temporal context).
+
+## 6b. Notifications (SMTP / Telegram / Discord)
+
+Verified end-to-end with local sinks (aiosmtpd on :1025, HTTP sink on :9797):
+configure the channels in Settings, trigger an unknown-face alert, and all
+three deliver — email with subject `[SentinelAI ALERT] ...`, Telegram
+`sendMessage` with chat_id, Discord embed payload. Secrets (`smtp_password`,
+`telegram_bot_token`, `discord_webhook_url`) come back masked as `********`
+from GET /api/settings, and sending the mask back leaves the stored value
+unchanged. Failures are logged and never block the recognition pipeline.
+
+## 6c. Reports (4 formats)
+
+`GET /api/reports/visitors?period=daily|weekly|monthly&format=csv|json|pdf|xlsx`
+— PDF validates as `PDF document 1.4`, XLSX opens in openpyxl with a frozen
+header row. All four download buttons are on the Reports page.
 
 ## 7. Reports & analytics
 
@@ -107,9 +136,19 @@ Walk through: Dashboard stats → Live Camera (+ AI overlay toggle) → snapshot
 test upload → Users (create, photo upload) → Unknown Visitors → open case →
 Cases → close case → Reports CSV download → Settings threshold slider.
 
+## 10. Docker deployment
+
+Verified with colima on this machine: `docker compose up -d` brings up
+postgres:16 (healthcheck), the backend (connects to the containerized DB,
+seeds admin), and the frontend behind nginx. Checks: backend root 200,
+containerized login 200, `/api/users` returns the seeded admin, frontend 200
+on :5173, and login proxied through nginx 200. Host webcams are not reachable
+from macOS containers — use an RTSP `camera_source`.
+
 ## Known environment caveats
 
-- Docker is not installed on this dev machine — `docker-compose.yml` is
-  syntax-validated only; run `docker compose up --build` where Docker exists.
 - OpenCV must stay `< 5` (5.x removed `CascadeClassifier`, used by the
   no-insightface fallback); the requirement is pinned.
+- macOS: start the backend with `python run.py` / `python -m uvicorn`, never
+  the bare `uvicorn` console script (camera permission is silently lost —
+  see INSTALL.md §3).

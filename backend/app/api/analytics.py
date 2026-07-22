@@ -2,7 +2,7 @@
 from datetime import date, datetime, time, timedelta
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import func
+from sqlalchemy import extract, func
 from sqlalchemy.orm import Session
 
 from app.core.security import get_current_user
@@ -75,24 +75,30 @@ def daily(
 ):
     start = _today_start() - timedelta(days=days - 1)
 
-    recognized_rows = dict(
-        db.query(
+    def _date_key(k) -> str:
+        # func.date() returns date objects on PostgreSQL but strings on SQLite
+        return k.isoformat() if hasattr(k, "isoformat") else str(k)
+
+    recognized_rows = {
+        _date_key(k): v
+        for k, v in db.query(
             func.date(RecognitionLog.timestamp),
             func.count(RecognitionLog.id),
         )
         .filter(RecognitionLog.timestamp >= start)
         .group_by(func.date(RecognitionLog.timestamp))
         .all()
-    )
-    unknown_rows = dict(
-        db.query(
+    }
+    unknown_rows = {
+        _date_key(k): v
+        for k, v in db.query(
             func.date(UnknownFace.timestamp),
             func.count(UnknownFace.id),
         )
         .filter(UnknownFace.timestamp >= start)
         .group_by(func.date(UnknownFace.timestamp))
         .all()
-    )
+    }
 
     points: list[DailyPoint] = []
     for offset in range(days):
@@ -113,15 +119,16 @@ def peak_hours(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    hour_expr = func.strftime("%H", RecognitionLog.timestamp)
-    rows = dict(
-        db.query(hour_expr, func.count(RecognitionLog.id))
+    # extract('hour', ...) is portable: SQLAlchemy compiles it to strftime on
+    # SQLite and EXTRACT on PostgreSQL (strftime does not exist there).
+    hour_expr = extract("hour", RecognitionLog.timestamp)
+    rows = {
+        int(k): v
+        for k, v in db.query(hour_expr, func.count(RecognitionLog.id))
         .group_by(hour_expr)
         .all()
-    )
-    return [
-        PeakHourPoint(hour=h, count=int(rows.get(f"{h:02d}", 0))) for h in range(24)
-    ]
+    }
+    return [PeakHourPoint(hour=h, count=int(rows.get(h, 0))) for h in range(24)]
 
 
 @router.get("/cameras", response_model=list[CameraPoint])

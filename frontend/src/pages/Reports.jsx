@@ -8,13 +8,19 @@ import { titleCase } from '../utils/format';
 
 const PERIODS = ['daily', 'weekly', 'monthly'];
 
+const DOWNLOAD_FORMATS = [
+  { format: 'csv', ext: 'csv', label: 'CSV' },
+  { format: 'pdf', ext: 'pdf', label: 'PDF' },
+  { format: 'xlsx', ext: 'xlsx', label: 'Excel' },
+];
+
 export default function Reports() {
   const toast = useToast();
   const [period, setPeriod] = useState('daily');
   const [rows, setRows] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [downloading, setDownloading] = useState(false);
+  const [downloading, setDownloading] = useState('');
 
   useEffect(() => {
     let alive = true;
@@ -34,15 +40,15 @@ export default function Reports() {
     };
   }, [period]);
 
-  const downloadCsv = async () => {
-    setDownloading(true);
+  const download = async (format, ext) => {
+    setDownloading(format);
     try {
-      const res = await api.raw('/api/reports/visitors', { period, format: 'csv' });
+      const res = await api.raw('/api/reports/visitors', { period, format });
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `visitors_${period}_${new Date().toISOString().slice(0, 10)}.csv`;
+      a.download = `visitors_${period}_${new Date().toISOString().slice(0, 10)}.${ext}`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -50,7 +56,7 @@ export default function Reports() {
     } catch (e) {
       toast(e.message, 'error');
     } finally {
-      setDownloading(false);
+      setDownloading('');
     }
   };
 
@@ -71,9 +77,19 @@ export default function Reports() {
               </button>
             ))}
           </div>
-          <button className="btn btn-primary" onClick={downloadCsv} disabled={downloading}>
-            <Icon name="reports" size={15} /> {downloading ? 'Preparing…' : 'Download CSV'}
-          </button>
+          <div className="row-gap">
+            {DOWNLOAD_FORMATS.map(({ format, ext, label }) => (
+              <button
+                key={format}
+                className={`btn ${format === 'csv' ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => download(format, ext)}
+                disabled={!!downloading}
+              >
+                <Icon name="reports" size={15} />{' '}
+                {downloading === format ? 'Preparing…' : label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {loading ? (

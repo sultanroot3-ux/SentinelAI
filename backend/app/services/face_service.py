@@ -83,42 +83,114 @@ def _get_haar_cascade():
 # ---------------------------------------------------------------------------
 # Liveness
 # ---------------------------------------------------------------------------
+# insightface landmark_2d_106 eye contours (verified empirically by rendering
+# indexed landmarks on sample faces — see docs/TESTING.md §6):
+_LEFT_EYE_IDX = list(range(33, 43))    # 33..42
+_RIGHT_EYE_IDX = list(range(87, 97))   # 87..96
+
+
+def _eye_openness(lmk, idx) -> float:
+    """Eye openness ratio: vertical / horizontal extent of the eye contour.
+
+    Index-order agnostic (uses bounding extents), so it is robust even if the
+    exact upper/lower-lid point identities differ between model versions.
+    """
+    pts = lmk[idx]
+    w = float(pts[:, 0].max() - pts[:, 0].min())
+    h = float(pts[:, 1].max() - pts[:, 1].min())
+    return h / w if w > 0 else 0.0
+
+
 class LivenessMonitor:
-    """Temporal liveness check for live video streams (anti-photo heuristic).
+    """Temporal liveness for live video streams — three independent signals.
 
-    Tracks the 5-point facial keypoints (eyes, nose, mouth corners) of the
-    dominant face over a sliding window, normalized by face size. A printed
-    photo or phone screen moves (mostly) rigidly, so its normalized keypoint
-    geometry stays nearly constant, while a real face continuously deforms a
-    little (blinks, expression micro-movement).
+    1. BLINK: eye-openness (per-frame, from the 106-point landmarks) dips
+       below ~55%% of its rolling median and recovers. Photos never blink.
+    2. NON-RIGID MOTION: normalized 5-point keypoint geometry variance.
+       A photo/screen moves rigidly; a real face constantly deforms slightly.
+    3. HEAD-POSE MICRO-MOTION: std of (pitch, yaw, roll) from the 3D landmark
+       model. A mounted photo/screen is nearly static in pose space.
 
-    This is a lightweight heuristic, not certified anti-spoofing — Module 6
-    will extend it with blink detection / depth cues.
+    Verdict: LIVE if a blink was observed, OR both motion signals exceed
+    their thresholds. This defeats printed photos and static screen replays;
+    it is best-effort (not certified PAD) against high-quality video replays.
     """
 
-    def __init__(self, window: int = 25, min_samples: int = 8,
-                 rigidity_threshold: float = 0.0035):
-        self.samples: deque = deque(maxlen=window)
+    BLINK_DROP = 0.55          # openness must dip below 55% of rolling median
+    MOTION_THRESHOLD = 0.0035  # normalized kps std
+    POSE_STD_THRESHOLD = 0.35  # degrees
+
+    def __init__(self, window: int = 25, min_samples: int = 8):
+        self.samples: deque = deque(maxlen=window)       # normalized kps
+        self.pose_samples: deque = deque(maxlen=window)  # (pitch, yaw, roll)
+        self.openness: deque = deque(maxlen=window * 2)  # avg eye openness
         self.min_samples = min_samples
-        self.rigidity_threshold = rigidity_threshold
+        self.blinks = 0
+        self._eye_closed = False
+
+    def _update_blink(self, face) -> None:
+        lmk = getattr(face, "landmark_2d_106", None)
+        if lmk is None:
+            return
+        lmk = np.asarray(lmk, dtype=np.float32)
+        openness = (_eye_openness(lmk, _LEFT_EYE_IDX)
+                    + _eye_openness(lmk, _RIGHT_EYE_IDX)) / 2.0
+        self.openness.append(openness)
+        if len(self.openness) < 5:
+            return
+        median = float(np.median(self.openness))
+        if median <= 0:
+            return
+        # Hysteresis: count a blink on the closed->open transition
+        if openness < self.BLINK_DROP * median:
+            self._eye_closed = True
+        elif self._eye_closed:
+            self._eye_closed = False
+            self.blinks += 1
 
     def update(self, face) -> dict:
         """Feed one insightface detection; returns a liveness verdict dict."""
         box = face.bbox
         size = max(box[2] - box[0], box[3] - box[1])
         if size <= 0:
-            return {"passed": False, "method": "motion", "note": "invalid box"}
-        # Normalize keypoints: translation- and scale-invariant geometry
+            return {"passed": False, "method": "blink+motion+pose", "note": "invalid box"}
+
+        # Signal 1: blink
+        self._update_blink(face)
+
+        # Signal 2: non-rigid keypoint motion (translation/scale invariant)
         kps = np.asarray(face.kps, dtype=np.float32)
         norm = (kps - kps.mean(axis=0)) / float(size)
         self.samples.append(norm.flatten())
+
+        # Signal 3: head-pose micro-motion
+        pose = getattr(face, "pose", None)
+        if pose is not None:
+            self.pose_samples.append(np.asarray(pose, dtype=np.float32))
+
         if len(self.samples) < self.min_samples:
-            return {"passed": None, "method": "motion", "note": "collecting frames"}
+            return {
+                "passed": None,
+                "method": "blink+motion+pose",
+                "note": "collecting frames",
+                "blinks": self.blinks,
+            }
+
         motion = float(np.stack(self.samples).std(axis=0).mean())
+        pose_std = (
+            float(np.stack(self.pose_samples).std(axis=0).mean())
+            if len(self.pose_samples) >= self.min_samples
+            else 0.0
+        )
+        passed = self.blinks >= 1 or (
+            motion >= self.MOTION_THRESHOLD and pose_std >= self.POSE_STD_THRESHOLD
+        )
         return {
-            "passed": motion >= self.rigidity_threshold,
-            "method": "motion",
-            "score": round(motion, 5),
+            "passed": passed,
+            "method": "blink+motion+pose",
+            "blinks": self.blinks,
+            "motion": round(motion, 5),
+            "pose_std": round(pose_std, 3),
         }
 
 
@@ -166,23 +238,55 @@ def cosine_similarity(a, b) -> float:
     return float(np.dot(a, b) / denom)
 
 
+# In-memory embedding cache: one (N x 512) unit-normalized matrix, so matching
+# a face against ALL registered users is a single vectorized dot product per
+# frame instead of a per-user Python loop + full-table read.
+_EMBED_CACHE: dict = {"valid": False, "ids": None, "matrix": None}
+
+
+def invalidate_embedding_cache() -> None:
+    """Call after any change to stored embeddings (photo upload, user delete)."""
+    _EMBED_CACHE["valid"] = False
+
+
+def _get_embedding_matrix(db: Session):
+    """Return (user_ids array, unit-normalized embedding matrix) or (None, None)."""
+    if not _EMBED_CACHE["valid"]:
+        users = (
+            db.query(User.id, User.face_embedding)
+            .filter(User.face_registered.is_(True), User.face_embedding.isnot(None))
+            .all()
+        )
+        ids, rows = [], []
+        for uid, blob in users:
+            vec = np.frombuffer(blob, dtype=np.float32)
+            norm = float(np.linalg.norm(vec))
+            if vec.size == 0 or norm == 0:
+                continue
+            ids.append(uid)
+            rows.append(vec / norm)
+        _EMBED_CACHE["ids"] = np.asarray(ids) if ids else None
+        _EMBED_CACHE["matrix"] = np.stack(rows) if rows else None
+        _EMBED_CACHE["valid"] = True
+    return _EMBED_CACHE["ids"], _EMBED_CACHE["matrix"]
+
+
 def _match_embedding(embedding, db: Session, threshold: float):
     """Compare an embedding against all registered users. Returns (user, score)."""
-    best_user, best_score = None, -1.0
-    users = (
-        db.query(User)
-        .filter(User.face_registered.is_(True), User.face_embedding.isnot(None))
-        .all()
-    )
-    for user in users:
-        stored = np.frombuffer(user.face_embedding, dtype=np.float32)
-        if stored.size == 0 or embedding.size != stored.size:
-            continue
-        score = cosine_similarity(embedding, stored)
-        if score > best_score:
-            best_user, best_score = user, score
-    if best_user is not None and best_score >= threshold:
-        return best_user, best_score
+    ids, matrix = _get_embedding_matrix(db)
+    if matrix is None or embedding.size != matrix.shape[1]:
+        return None, -1.0
+    emb_norm = float(np.linalg.norm(embedding))
+    if emb_norm == 0:
+        return None, -1.0
+    scores = matrix @ (embedding / emb_norm)  # cosine vs every user at once
+    best_idx = int(np.argmax(scores))
+    best_score = float(scores[best_idx])
+    if best_score >= threshold:
+        user = db.get(User, int(ids[best_idx]))
+        if user is not None:
+            return user, best_score
+        invalidate_embedding_cache()  # cached id no longer exists
     return None, best_score
 
 

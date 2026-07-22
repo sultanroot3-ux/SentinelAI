@@ -3,9 +3,20 @@
 Values can be overridden via environment variables prefixed with SENTINEL_
 (e.g. SENTINEL_SECRET_KEY, SENTINEL_DATABASE_URL) or a backend/.env file.
 """
+import os
+import sys
 from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# macOS: FastAPI serves requests on worker threads, but OpenCV's AVFoundation
+# backend can only show the camera-permission prompt from the main run loop —
+# opening the camera from a thread fails with "can not spin main run loop".
+# Camera permission must be granted to the launching app beforehand (System
+# Settings -> Privacy & Security -> Camera); this flag skips the in-process
+# prompt and just captures.
+if sys.platform == "darwin":
+    os.environ.setdefault("OPENCV_AVFOUNDATION_SKIP_AUTH", "1")
 
 # backend/app/core/config.py -> parents[2] == backend/, parents[3] == project root
 BACKEND_DIR = Path(__file__).resolve().parents[2]

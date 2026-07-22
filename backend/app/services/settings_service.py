@@ -11,7 +11,28 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "liveness_enabled": False,
     "camera_source": "0",
     "notify_on_unknown": True,
+    # Email (SMTP)
+    "email_enabled": False,
+    "smtp_host": "",
+    "smtp_port": 587,
+    "smtp_user": "",
+    "smtp_password": "",
+    "smtp_from": "",
+    "smtp_to": "",
+    "smtp_tls": True,
+    # Telegram
+    "telegram_enabled": False,
+    "telegram_bot_token": "",
+    "telegram_chat_id": "",
+    # Discord
+    "discord_enabled": False,
+    "discord_webhook_url": "",
 }
+
+# Values masked in API responses; a masked value sent back in an update is
+# ignored so the stored secret is not clobbered by the UI round-trip.
+SECRET_KEYS = {"smtp_password", "telegram_bot_token", "discord_webhook_url"}
+SECRET_MASK = "********"
 
 
 def get_setting(db: Session, key: str, default: Any = None) -> Any:

@@ -8,16 +8,37 @@ from app.core.security import get_current_user, require_roles
 from app.db.database import get_db
 from app.models.models import User
 from app.services.audit_service import write_audit
-from app.services.settings_service import get_all_settings, set_settings
+from app.services.settings_service import (
+    DEFAULT_SETTINGS,
+    SECRET_KEYS,
+    SECRET_MASK,
+    get_all_settings,
+    set_settings,
+)
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
-KNOWN_KEYS = {
-    "recognition_threshold",
+KNOWN_KEYS = set(DEFAULT_SETTINGS)
+
+_BOOL_KEYS = (
     "liveness_enabled",
-    "camera_source",
     "notify_on_unknown",
-}
+    "email_enabled",
+    "smtp_tls",
+    "telegram_enabled",
+    "discord_enabled",
+)
+_STR_KEYS = (
+    "camera_source",
+    "smtp_host",
+    "smtp_user",
+    "smtp_password",
+    "smtp_from",
+    "smtp_to",
+    "telegram_bot_token",
+    "telegram_chat_id",
+    "discord_webhook_url",
+)
 
 
 def _validate(values: dict[str, Any]) -> None:
@@ -29,11 +50,25 @@ def _validate(values: dict[str, Any]) -> None:
                 detail="recognition_threshold must be a number between 0 and 1",
             )
         values["recognition_threshold"] = float(v)
-    for key in ("liveness_enabled", "notify_on_unknown"):
+    if "smtp_port" in values:
+        try:
+            values["smtp_port"] = int(values["smtp_port"])
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=422, detail="smtp_port must be an integer")
+    for key in _BOOL_KEYS:
         if key in values and not isinstance(values[key], bool):
             raise HTTPException(status_code=422, detail=f"{key} must be a boolean")
-    if "camera_source" in values:
-        values["camera_source"] = str(values["camera_source"])
+    for key in _STR_KEYS:
+        if key in values:
+            values[key] = str(values[key])
+
+
+def _mask_secrets(settings_map: dict[str, Any]) -> dict[str, Any]:
+    """Never return stored secrets to the browser — mask non-empty ones."""
+    return {
+        k: (SECRET_MASK if k in SECRET_KEYS and v else v)
+        for k, v in settings_map.items()
+    }
 
 
 @router.get("")
@@ -41,7 +76,7 @@ def get_settings_map(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ) -> dict[str, Any]:
-    return get_all_settings(db)
+    return _mask_secrets(get_all_settings(db))
 
 
 @router.put("")
@@ -56,6 +91,13 @@ def update_settings_map(
             status_code=422,
             detail=f"Unknown setting keys: {', '.join(sorted(unknown))}",
         )
+    # A masked secret coming back from the UI means "unchanged" — drop it
+    # so the stored value is not overwritten with the mask literal.
+    values = {
+        k: v
+        for k, v in values.items()
+        if not (k in SECRET_KEYS and v == SECRET_MASK)
+    }
     _validate(values)
     result = set_settings(db, values)
     write_audit(
@@ -64,4 +106,4 @@ def update_settings_map(
         f"Updated settings: {', '.join(sorted(values.keys())) or 'none'}",
         user=admin,
     )
-    return result
+    return _mask_secrets(result)

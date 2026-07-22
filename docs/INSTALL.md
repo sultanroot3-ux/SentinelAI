@@ -87,6 +87,12 @@ webcam you may see *"not authorized to capture video"* — grant access in
 restart the backend. IP/RTSP cameras need no permission: set `camera_source`
 to the stream URL in the dashboard Settings page.
 
+> **Important:** start the backend with `python run.py` or
+> `python -m uvicorn app.main:app` — NOT the bare `uvicorn` console script.
+> macOS TCC attributes the console-script launch as a different (never
+> authorized) process and camera capture silently fails with
+> "not authorized to capture video (status 0)" even after you granted access.
+
 ## 4. Docker (all-in-one)
 
 ```bash
