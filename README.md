@@ -2,6 +2,10 @@
 
 > **See • Recognize • Analyze • Protect**
 
+[![CI](https://github.com/sultanroot3-ux/SentinelAI/actions/workflows/ci.yml/badge.svg)](https://github.com/sultanroot3-ux/SentinelAI/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/sultanroot3-ux/SentinelAI)](https://github.com/sultanroot3-ux/SentinelAI/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 SentinelAI is an AI-powered vision security platform for organizations, universities, offices, labs and research environments. It detects faces from live camera feeds, recognizes registered users, logs events, manages unknown visitors through case management, and provides a secure administrative dashboard.
 
 Unknown people are handled through **case management** rather than automatically revealing private information — the system focuses on authorized recognition and security management.
@@ -98,6 +102,8 @@ Live Camera → Frame Capture → Face Detection → Quality Check → Liveness
 ## 📖 Documentation
 
 - [API Contract](docs/API_CONTRACT.md) — every endpoint, payload and model
+- [Installation](docs/INSTALL.md) · [Testing](docs/TESTING.md) · [Deployment](deployment/DEPLOYMENT.md)
+- [Changelog](CHANGELOG.md) · [Contributing](CONTRIBUTING.md) · [Security Policy](SECURITY.md) · [Code of Conduct](CODE_OF_CONDUCT.md)
 
 ## 🔥 Roadmap
 
