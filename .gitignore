@@ -22,10 +22,10 @@ unknown_faces/*
 !uploads/.gitkeep
 !unknown_faces/.gitkeep
 
-# AI models
+# AI model weights (root-level only — NOT backend/app/models/, which is source code)
 *.onnx
 *.pt
-models/
+/models/
 
 # OS / editor
 .DS_Store
