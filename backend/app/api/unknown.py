@@ -4,6 +4,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
+from app.api.utils import serialize_unknown
 from app.core.config import settings
 from app.core.security import get_current_user, require_roles
 from app.db.database import get_db
@@ -34,7 +35,7 @@ def list_unknown(
         .all()
     )
     return PaginatedUnknown(
-        items=[UnknownFaceOut.model_validate(u) for u in items],
+        items=[serialize_unknown(u) for u in items],
         total=total,
         page=page,
     )
@@ -53,7 +54,7 @@ def update_unknown(
     unknown.status = payload.status
     db.commit()
     db.refresh(unknown)
-    return UnknownFaceOut.model_validate(unknown)
+    return serialize_unknown(unknown)
 
 
 @router.delete("/{unknown_id}")

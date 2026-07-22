@@ -5,7 +5,6 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from fastapi.staticfiles import StaticFiles
 
 from app.core.config import settings
 from app.core.logging_config import setup_logging
@@ -22,6 +21,7 @@ from app.api import (
     departments,
     health,
     logs,
+    media,
     notifications,
     recognition,
     reports,
@@ -124,20 +124,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Static file mounts (per API contract)
-app.mount(
-    "/static/uploads",
-    StaticFiles(directory=str(settings.UPLOADS_DIR)),
-    name="uploads",
-)
-app.mount(
-    "/static/unknown_faces",
-    StaticFiles(directory=str(settings.UNKNOWN_FACES_DIR)),
-    name="unknown_faces",
-)
+# Biometric media (user photos, unknown-visitor snapshots) is sensitive and is
+# NOT served from a public static mount. It is delivered only through the
+# authenticated /api/media router using short-lived signed URLs (app.api.media).
 
 # Routers
 app.include_router(health.router)
+app.include_router(media.router)
 app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(departments.router)

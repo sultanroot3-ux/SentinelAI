@@ -27,7 +27,9 @@ def test_full_case_lifecycle(client, admin_headers, db_session):
     case = resp.json()
     assert case["case_number"].startswith("CASE-")
     assert case["status"] == "open"
-    assert case["snapshot_url"] == "/static/unknown_faces/x.jpg"
+    # snapshot is now returned as a signed media URL, never the raw static path
+    assert case["snapshot_url"].startswith("/api/media/unknown_faces/x.jpg?")
+    assert "/static/" not in case["snapshot_url"]
 
     cid = case["id"]
     resp = client.put(
