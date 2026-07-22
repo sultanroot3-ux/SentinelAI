@@ -1,4 +1,12 @@
-"""Password hashing, JWT creation/validation and auth dependencies."""
+"""Password hashing, JWT creation/validation and auth dependencies.
+
+Token model:
+- ACCESS tokens: short-lived (default 30 min), sent as `Authorization: Bearer`.
+- REFRESH tokens: long-lived (default 7 days), single-use — each refresh
+  rotates the token; the jti of every issued refresh token is stored in the
+  refresh_tokens table so it can be revoked (logout, password change).
+"""
+import uuid
 from datetime import datetime, timedelta, timezone
 
 from fastapi import Depends, HTTPException, status
@@ -9,7 +17,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.db.database import get_db
-from app.models.models import User
+from app.models.models import RefreshToken, User
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -36,9 +44,61 @@ def create_access_token(user: User) -> str:
         "sub": str(user.id),
         "username": user.username,
         "role": user.role,
+        "type": "access",
         "exp": expire,
     }
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+
+
+def create_refresh_token(user: User, db: Session) -> str:
+    """Issue a refresh token and record its jti for rotation/revocation."""
+    expire = datetime.now(timezone.utc) + timedelta(
+        days=settings.REFRESH_TOKEN_EXPIRE_DAYS
+    )
+    jti = uuid.uuid4().hex
+    db.add(
+        RefreshToken(
+            jti=jti, user_id=user.id, expires_at=expire.replace(tzinfo=None)
+        )
+    )
+    db.commit()
+    payload = {"sub": str(user.id), "jti": jti, "type": "refresh", "exp": expire}
+    return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+
+
+def consume_refresh_token(token: str, db: Session) -> User:
+    """Validate + revoke (rotate) a refresh token; returns its user.
+
+    Raises 401 if the token is invalid, expired, of the wrong type, unknown,
+    or already used/revoked.
+    """
+    payload = decode_token(token)
+    if payload.get("type") != "refresh":
+        raise HTTPException(status_code=401, detail="Not a refresh token")
+    row = (
+        db.query(RefreshToken).filter(RefreshToken.jti == payload.get("jti")).first()
+    )
+    if row is None or row.revoked:
+        raise HTTPException(status_code=401, detail="Refresh token revoked or unknown")
+    if row.expires_at < datetime.utcnow():
+        raise HTTPException(status_code=401, detail="Refresh token expired")
+    row.revoked = True  # single-use: rotation happens by issuing a new one
+    db.commit()
+    user = db.get(User, row.user_id)
+    if user is None:
+        raise HTTPException(status_code=401, detail="User no longer exists")
+    return user
+
+
+def revoke_all_refresh_tokens(user_id: int, db: Session) -> int:
+    """Revoke every live refresh token for a user (logout-all / password change)."""
+    count = (
+        db.query(RefreshToken)
+        .filter(RefreshToken.user_id == user_id, RefreshToken.revoked.is_(False))
+        .update({"revoked": True})
+    )
+    db.commit()
+    return count
 
 
 def decode_token(token: str) -> dict:
@@ -54,6 +114,9 @@ def decode_token(token: str) -> dict:
 
 def get_user_from_token(token: str, db: Session) -> User:
     payload = decode_token(token)
+    # Refresh tokens must never work as access tokens
+    if payload.get("type") == "refresh":
+        raise HTTPException(status_code=401, detail="Refresh token cannot be used for access")
     user = db.get(User, int(payload.get("sub", 0)))
     if user is None:
         raise HTTPException(status_code=401, detail="User no longer exists")

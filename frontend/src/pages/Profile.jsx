@@ -1,13 +1,21 @@
 import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import Badge from '../components/Badge';
+import ChangePasswordForm from '../components/ChangePasswordForm';
 import Icon from '../components/Icons';
+import { useToast } from '../components/Toast';
 import { getTheme, setTheme } from '../theme';
 import { fmtDate, titleCase } from '../utils/format';
 
 export default function Profile() {
-  const { user } = useAuth();
+  const { user, updateUser } = useAuth();
+  const toast = useToast();
   const [theme, setThemeState] = useState(getTheme());
+
+  const onPasswordChanged = (updated) => {
+    updateUser(updated);
+    toast('Password changed', 'success');
+  };
 
   const chooseTheme = (t) => {
     setTheme(t);
@@ -60,6 +68,14 @@ export default function Profile() {
             <dd>{fmtDate(user.created_at)}</dd>
           </div>
         </dl>
+      </div>
+
+      <div className="card pad">
+        <h2>Change Password</h2>
+        <p className="muted-text">Choose a new password for your account.</p>
+        <div className="spaced-top">
+          <ChangePasswordForm onSuccess={onPasswordChanged} />
+        </div>
       </div>
 
       <div className="card pad">

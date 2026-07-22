@@ -18,6 +18,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 if sys.platform == "darwin":
     os.environ.setdefault("OPENCV_AVFOUNDATION_SKIP_AUTH", "1")
 
+# Known development-only secret; production must override it.
+_DEV_SECRET_KEY = "sentinelai-super-secret-key-change-in-production"
+
 # backend/app/core/config.py -> parents[2] == backend/, parents[3] == project root
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 PROJECT_ROOT = BACKEND_DIR.parent
@@ -32,9 +35,13 @@ class Settings(BaseSettings):
     )
 
     APP_NAME: str = "SentinelAI - Intelligent Vision Security Platform"
-    SECRET_KEY: str = "sentinelai-super-secret-key-change-in-production"
+    # "development" (default) or "production". Production refuses to start
+    # with the built-in dev secret — see validate_for_environment().
+    ENV: str = "development"
+    SECRET_KEY: str = _DEV_SECRET_KEY
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 12  # 12 hours
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
     # Database. Empty string -> SQLite file fallback (zero-config dev mode).
     # For PostgreSQL set e.g. SENTINEL_DATABASE_URL=postgresql+psycopg2://user@localhost/sentinelai
@@ -57,6 +64,33 @@ class Settings(BaseSettings):
     @property
     def is_sqlite(self) -> bool:
         return self.database_url.startswith("sqlite")
+
+    @property
+    def is_production(self) -> bool:
+        return self.ENV.lower() == "production"
+
+    def validate_for_environment(self) -> None:
+        """Fail fast on unsafe production configuration (called at startup)."""
+        if not self.is_production:
+            return
+        problems = []
+        if self.SECRET_KEY == _DEV_SECRET_KEY:
+            problems.append(
+                "SENTINEL_SECRET_KEY is the built-in development key — set a "
+                "unique secret (e.g. `openssl rand -hex 32`)."
+            )
+        if len(self.SECRET_KEY) < 32:
+            problems.append("SENTINEL_SECRET_KEY must be at least 32 characters.")
+        if not self.DATABASE_URL:
+            problems.append(
+                "SENTINEL_DATABASE_URL is not set — production must not fall "
+                "back to the SQLite dev database."
+            )
+        if problems:
+            raise RuntimeError(
+                "Refusing to start with unsafe production config:\n- "
+                + "\n- ".join(problems)
+            )
 
     def ensure_dirs(self) -> None:
         """Create runtime directories if they do not exist."""

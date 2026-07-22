@@ -20,7 +20,14 @@ export default function Login() {
       await login(username.trim(), password);
       navigate('/', { replace: true });
     } catch (err) {
-      setError(err.message || 'Login failed');
+      if (err.status === 429) {
+        const fallback = err.retryAfter
+          ? `Too many login attempts — try again in ${err.retryAfter} seconds.`
+          : 'Too many login attempts — please try again later.';
+        setError(err.message && !err.message.startsWith('Request failed') ? err.message : fallback);
+      } else {
+        setError(err.message || 'Login failed');
+      }
     } finally {
       setBusy(false);
     }

@@ -66,8 +66,8 @@ export default function Layout() {
     (n) => n.to === location.pathname || (n.to !== '/' && location.pathname.startsWith(n.to))
   );
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await logout();
     navigate('/login');
   };
 

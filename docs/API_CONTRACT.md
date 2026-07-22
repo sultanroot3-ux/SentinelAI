@@ -6,8 +6,21 @@ Auth: JWT Bearer token in `Authorization: Bearer <token>` header (except login a
 ## Auth
 | Method | Path | Body / Params | Response |
 |---|---|---|---|
-| POST | `/api/auth/login` | JSON `{username, password}` | `{access_token, token_type, user}` |
+| POST | `/api/auth/login` | JSON `{username, password}` | `{access_token, refresh_token, token_type, user}` — 429 + `Retry-After` after 5 failed attempts per username+IP in 15 min |
+| POST | `/api/auth/refresh` | `{refresh_token}` | new `{access_token, refresh_token, ...}` — refresh tokens are single-use (rotation); reuse → 401 |
+| POST | `/api/auth/logout` | `{refresh_token}` (+ Bearer) | revokes the refresh token |
+| POST | `/api/auth/change-password` | `{current_password, new_password}` (+ Bearer) | updated `User`; revokes all refresh tokens. 401 wrong current, 422 `new_password` < 8 chars |
 | GET | `/api/auth/me` | — | `User` |
+
+Access tokens expire in 30 min (`type: "access"`); refresh tokens in 7 days
+(`type: "refresh"`, jti tracked server-side). `User.must_change_password=true`
+means the client must force a password change before using the app (seeded
+admin starts with it set).
+
+## Health
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/api/health` | unauthenticated; `{status, database}`, 503 if DB down |
 
 ## Users
 | Method | Path | Notes |
@@ -19,7 +32,9 @@ Auth: JWT Bearer token in `Authorization: Bearer <token>` header (except login a
 | DELETE | `/api/users/{id}` | |
 | POST | `/api/users/{id}/photo` | multipart `file` — registers face embedding, stores photo |
 
-`User`: `{id, name, email, username, role, department_id, department_name, employee_id, access_level, photo_url, face_registered, created_at}`
+`User`: `{id, name, email, username, role, department_id, department_name, employee_id, access_level, photo_url, face_registered, must_change_password, created_at}`
+
+Passwords: minimum 8 characters (create, update, change-password).
 
 Roles: `admin`, `security_officer`, `receptionist`, `it`.
 

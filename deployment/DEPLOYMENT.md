@@ -56,11 +56,49 @@ docker compose up --build -d
 - Expect ~5–10 FPS detection at 640×480; lower the stream resolution in
   Settings if needed.
 
+## HTTPS
+
+**Docker (built-in):** the frontend container terminates TLS on port 8443.
+Generate a local cert once (`./deployment/generate_self_signed_cert.sh`), or
+mount real certificates into `docker/certs/` (`sentinel.crt` + `sentinel.key`).
+Port 5173 (HTTP) redirects to HTTPS; `/api/health` stays available on HTTP
+for load-balancer probes.
+
+**Bare metal:** use certbot with the nginx site config —
+`sudo certbot --nginx -d your.domain` — then mirror the security headers from
+`docker/nginx.conf` (HSTS, CSP, X-Frame-Options, nosniff, Referrer-Policy).
+
+## Backups
+
+`deployment/backup_postgres.sh` dumps the database (gzip), verifies the dump
+completed, and prunes backups older than `RETENTION_DAYS` (default 14):
+
+```bash
+# cron — daily at 03:00
+0 3 * * *  /opt/sentinelai/deployment/backup_postgres.sh /var/backups/sentinelai
+```
+
+Restore: `gunzip -c sentinelai_<stamp>.sql.gz | psql -d sentinelai`.
+Also back up `uploads/` and `unknown_faces/` (snapshots live on disk).
+
+## Monitoring
+
+- `GET /api/health` — unauthenticated, returns `{status, database}`;
+  503 when the database is down. Point your uptime monitor at it (the Docker
+  backend container uses it as its healthcheck too).
+- Logs: rotating file at `logs/sentinel.log` (5 MB × 5) + stdout. Audit trail
+  in the `audit_logs` table (logins, failed logins, rate-limited attempts,
+  user/case/settings changes, password changes).
+
 ## Production checklist
 
-- [ ] Change the default `admin` password immediately
-- [ ] Set a strong `SENTINEL_SECRET_KEY` environment variable
-- [ ] HTTPS via reverse proxy (nginx + certbot)
-- [ ] Back up `database/` and `unknown_faces/` regularly
+- [ ] Change the default `admin` password (forced on first login)
+- [ ] Set `SENTINEL_ENV=production` — the backend then refuses to start with
+      the dev secret key or without a database URL
+- [ ] Set `SENTINEL_SECRET_KEY` (`openssl rand -hex 32`) and
+      `SENTINEL_DB_PASSWORD` in `.env` (see `.env.example`)
+- [ ] Real TLS certificates (certbot) in place of the self-signed pair
+- [ ] Schedule `backup_postgres.sh` via cron; test a restore once
+- [ ] Point an uptime monitor at `/api/health`
 - [ ] Review local biometric-privacy law (GDPR / BIPA) and post required signage
 - [ ] Restrict dashboard access to your internal network / VPN

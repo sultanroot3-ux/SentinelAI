@@ -31,13 +31,24 @@ class UserOut(BaseModel):
     access_level: str | None = None
     photo_url: str | None = None
     face_registered: bool = False
+    must_change_password: bool = False
     created_at: datetime
 
 
 class LoginResponse(BaseModel):
     access_token: str
+    refresh_token: str
     token_type: str = "bearer"
     user: UserOut
+
+
+class RefreshRequest(BaseModel):
+    refresh_token: str
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str = Field(min_length=8)
 
 
 # ---------- Users ----------
@@ -45,7 +56,7 @@ class UserCreate(BaseModel):
     name: str
     email: EmailStr
     username: str
-    password: str = Field(min_length=4)
+    password: str = Field(min_length=8)
     role: Role = "receptionist"
     department_id: int | None = None
     employee_id: str | None = None
@@ -56,7 +67,7 @@ class UserUpdate(BaseModel):
     name: str | None = None
     email: EmailStr | None = None
     username: str | None = None
-    password: str | None = None
+    password: str | None = Field(default=None, min_length=8)
     role: Role | None = None
     department_id: int | None = None
     employee_id: str | None = None

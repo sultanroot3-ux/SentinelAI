@@ -1,7 +1,8 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { Navigate, Outlet } from 'react-router-dom';
-import { api, getToken, setToken, clearToken } from '../api/client';
+import { api, getToken, getRefreshToken, setTokens, clearTokens } from '../api/client';
 import Spinner from '../components/Spinner';
+import ForcePasswordChange from '../components/ForcePasswordChange';
 
 const AuthContext = createContext(null);
 
@@ -10,26 +11,34 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!getToken()) {
+    if (!getToken() && !getRefreshToken()) {
       setLoading(false);
       return;
     }
     api
       .get('/api/auth/me')
       .then(setUser)
-      .catch(() => clearToken())
+      .catch(() => clearTokens())
       .finally(() => setLoading(false));
   }, []);
 
   const login = useCallback(async (username, password) => {
     const data = await api.post('/api/auth/login', { username, password });
-    setToken(data.access_token);
+    setTokens(data);
     setUser(data.user);
     return data.user;
   }, []);
 
-  const logout = useCallback(() => {
-    clearToken();
+  const logout = useCallback(async () => {
+    const refreshToken = getRefreshToken();
+    if (refreshToken) {
+      try {
+        await api.post('/api/auth/logout', { refresh_token: refreshToken });
+      } catch {
+        /* revocation is best-effort — clear locally regardless */
+      }
+    }
+    clearTokens();
     setUser(null);
   }, []);
 
@@ -39,8 +48,14 @@ export function AuthProvider({ children }) {
     return me;
   }, []);
 
+  const updateUser = useCallback((u) => setUser(u), []);
+
+  const mustChangePassword = !!user?.must_change_password;
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, refreshUser }}>
+    <AuthContext.Provider
+      value={{ user, loading, login, logout, refreshUser, updateUser, mustChangePassword }}
+    >
       {children}
     </AuthContext.Provider>
   );
@@ -51,7 +66,7 @@ export function useAuth() {
 }
 
 export function ProtectedRoute() {
-  const { user, loading } = useAuth();
+  const { user, loading, mustChangePassword, updateUser } = useAuth();
   if (loading) {
     return (
       <div className="fullscreen-center">
@@ -60,5 +75,6 @@ export function ProtectedRoute() {
     );
   }
   if (!user) return <Navigate to="/login" replace />;
+  if (mustChangePassword) return <ForcePasswordChange onChanged={updateUser} />;
   return <Outlet />;
 }

@@ -1,9 +1,11 @@
+# Secrets come from a `.env` file next to this compose file (see .env.example).
+# Compose refuses to start if they are missing — no baked-in defaults.
 services:
   db:
     image: postgres:16-alpine
     environment:
       - POSTGRES_USER=sentinel
-      - POSTGRES_PASSWORD=sentinel
+      - POSTGRES_PASSWORD=${SENTINEL_DB_PASSWORD:?set SENTINEL_DB_PASSWORD in .env}
       - POSTGRES_DB=sentinelai
     volumes:
       - pg-data:/var/lib/postgresql/data
@@ -25,18 +27,28 @@ services:
     # devices:
     #   - /dev/video0:/dev/video0
     environment:
-      - SENTINEL_SECRET_KEY=change-me-in-production
-      - SENTINEL_DATABASE_URL=postgresql+psycopg2://sentinel:sentinel@db:5432/sentinelai
+      - SENTINEL_ENV=production
+      - SENTINEL_SECRET_KEY=${SENTINEL_SECRET_KEY:?set SENTINEL_SECRET_KEY in .env (openssl rand -hex 32)}
+      - SENTINEL_DATABASE_URL=postgresql+psycopg2://sentinel:${SENTINEL_DB_PASSWORD}@db:5432/sentinelai
     depends_on:
       db:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
 
   frontend:
     build:
       context: .
       dockerfile: docker/frontend.Dockerfile
     ports:
-      - "5173:80"
+      - "5173:80"     # redirects to HTTPS
+      - "8443:443"    # TLS (certs from docker/certs — see deployment/generate_self_signed_cert.sh)
+    volumes:
+      - ./docker/certs:/etc/nginx/certs:ro
     depends_on:
       - backend
 

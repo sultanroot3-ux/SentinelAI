@@ -16,6 +16,7 @@ def serialize_user(user: User) -> UserOut:
         access_level=user.access_level,
         photo_url=user.photo_url,
         face_registered=user.face_registered,
+        must_change_password=user.must_change_password,
         created_at=user.created_at,
     )
 

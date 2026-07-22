@@ -20,6 +20,7 @@ from app.api import (
     camera,
     cases,
     departments,
+    health,
     logs,
     notifications,
     recognition,
@@ -60,6 +61,8 @@ def seed_database() -> None:
                     department_id=security_dept.id if security_dept else None,
                     employee_id="EMP-0001",
                     access_level="full",
+                    # Force the default credentials to be rotated on first login
+                    must_change_password=True,
                 )
             )
             db.commit()
@@ -72,10 +75,11 @@ def seed_database() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    settings.validate_for_environment()  # refuses unsafe production config
     settings.ensure_dirs()
     Base.metadata.create_all(bind=engine)
     seed_database()
-    logger.info("SentinelAI backend ready.")
+    logger.info("SentinelAI backend ready (env=%s).", settings.ENV)
     yield
 
 
@@ -89,6 +93,27 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
     """
     logger.exception("Unhandled error on %s %s: %s", request.method, request.url.path, exc)
     return JSONResponse(status_code=500, content={"detail": "Internal server error"})
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    """Baseline security headers on every response.
+
+    HSTS is only meaningful (and only sent) in production, where the app sits
+    behind TLS — sending it over plain HTTP in dev would be ignored anyway.
+    """
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "no-referrer")
+    response.headers.setdefault(
+        "Permissions-Policy", "camera=(), microphone=(), geolocation=()"
+    )
+    if settings.is_production:
+        response.headers.setdefault(
+            "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
+        )
+    return response
 
 
 app.add_middleware(
@@ -112,6 +137,7 @@ app.mount(
 )
 
 # Routers
+app.include_router(health.router)
 app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(departments.router)

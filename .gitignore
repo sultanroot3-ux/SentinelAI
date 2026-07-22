@@ -32,3 +32,5 @@ models/
 .idea/
 .vscode/
 backend/.env
+docker/certs/
+backups/
