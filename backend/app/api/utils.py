@@ -1,0 +1,50 @@
+"""Shared serialization helpers for API routers."""
+from app.models.models import Case, RecognitionLog, User
+from app.schemas.schemas import CaseOut, RecognitionLogOut, UserOut
+
+
+def serialize_user(user: User) -> UserOut:
+    return UserOut(
+        id=user.id,
+        name=user.name,
+        email=user.email,
+        username=user.username,
+        role=user.role,
+        department_id=user.department_id,
+        department_name=user.department.name if user.department else None,
+        employee_id=user.employee_id,
+        access_level=user.access_level,
+        photo_url=user.photo_url,
+        face_registered=user.face_registered,
+        created_at=user.created_at,
+    )
+
+
+def serialize_log(log: RecognitionLog) -> RecognitionLogOut:
+    return RecognitionLogOut(
+        id=log.id,
+        user_id=log.user_id,
+        user_name=log.user.name if log.user else None,
+        camera=log.camera,
+        score=log.score,
+        snapshot_url=log.snapshot_url,
+        timestamp=log.timestamp,
+    )
+
+
+def serialize_case(case: Case) -> CaseOut:
+    return CaseOut(
+        id=case.id,
+        case_number=case.case_number,
+        unknown_face_id=case.unknown_face_id,
+        snapshot_url=case.unknown_face.snapshot_url if case.unknown_face else None,
+        camera=case.unknown_face.camera if case.unknown_face else None,
+        status=case.status,
+        priority=case.priority,
+        notes=case.notes,
+        assigned_to=case.assigned_to,
+        assigned_to_name=case.assignee.name if case.assignee else None,
+        resolution=case.resolution,
+        created_at=case.created_at,
+        updated_at=case.updated_at,
+    )

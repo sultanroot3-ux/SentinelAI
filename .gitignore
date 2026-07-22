@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env
+
+# Node
+node_modules/
+frontend/dist/
+
+# Database
+*.db
+*.sqlite3
+database/*.db
+
+# Runtime data
+logs/*.log
+uploads/*
+unknown_faces/*
+!uploads/.gitkeep
+!unknown_faces/.gitkeep
+
+# AI models
+*.onnx
+*.pt
+models/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+backend/.env
