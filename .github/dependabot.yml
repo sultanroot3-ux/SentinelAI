@@ -1,0 +1,34 @@
+version: 2
+updates:
+  # Backend Python dependencies
+  - package-ecosystem: pip
+    directory: /backend
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      python-minor:
+        update-types: ["minor", "patch"]
+    ignore:
+      # OpenCV 5 removed CascadeClassifier (Haar fallback) — stay on 4.x
+      - dependency-name: opencv-python
+        versions: [">=5.0.0"]
+    labels: ["dependencies", "backend"]
+
+  # Frontend npm dependencies
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      npm-minor:
+        update-types: ["minor", "patch"]
+    labels: ["dependencies", "frontend"]
+
+  # GitHub Actions
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    labels: ["dependencies", "ci"]

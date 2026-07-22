@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 🔒 Security vulnerability
+    url: https://github.com/sultanroot3-ux/SentinelAI/security/advisories/new
+    about: Report security issues privately — never in public issues.
+  - name: 💬 Questions & discussions
+    url: https://github.com/sultanroot3-ux/SentinelAI/discussions
+    about: Ask questions, share deployments, and discuss ideas.

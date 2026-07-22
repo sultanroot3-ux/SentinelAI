@@ -1,0 +1,50 @@
+name: ✨ Feature Request
+description: Suggest a new capability or improvement for SentinelAI
+title: "[Feature]: "
+labels: ["enhancement", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Check the [roadmap section of the README](https://github.com/sultanroot3-ux/SentinelAI#-roadmap)
+        and existing issues first — your idea may already be planned.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / motivation
+      description: What problem does this solve? Who benefits?
+      placeholder: As a security officer, I need multi-camera support because...
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: How should it work? Include API/UI sketches if helpful.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - AI engine (detection / recognition / liveness)
+        - Dashboard / UX
+        - Notifications
+        - Reports / analytics
+        - Deployment / operations
+        - Security / auth
+        - Other
+    validations:
+      required: true
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy check
+      options:
+        - label: This feature respects the project's privacy posture (unknown people handled via case management, no covert-surveillance functionality)
+          required: true

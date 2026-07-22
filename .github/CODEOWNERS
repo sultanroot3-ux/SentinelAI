@@ -1,0 +1,8 @@
+# Default owner for everything — review requests go here automatically.
+* @sultanroot3-ux
+
+# Security-sensitive areas (explicit, even though the default covers them)
+/backend/app/core/        @sultanroot3-ux
+/backend/app/api/auth.py  @sultanroot3-ux
+/.github/                 @sultanroot3-ux
+/SECURITY.md              @sultanroot3-ux
