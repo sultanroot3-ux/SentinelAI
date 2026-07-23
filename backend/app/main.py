@@ -42,8 +42,37 @@ setup_logging()
 logger = logging.getLogger("sentinelai")
 
 
-def seed_database() -> None:
-    """Idempotent seed: admin user + default departments + default settings."""
+def seed_database(retries: int = 5) -> None:
+    """Idempotent seed: admin user + default departments + default settings.
+
+    Concurrency-safe: with multiple uvicorn workers every worker runs this at
+    startup, and two can race between the exists-check and the insert. The
+    loser's IntegrityError is retried — on retry the exists-checks see the
+    other worker's committed rows and skip them.
+    """
+    import random
+    import time
+
+    from sqlalchemy.exc import IntegrityError
+
+    for attempt in range(1, retries + 1):
+        try:
+            _seed_database_once()
+            return
+        except IntegrityError:
+            if attempt == retries:
+                raise
+            # Jittered backoff desynchronizes workers that raced in lockstep;
+            # it also gives the winner time to COMMIT before we re-check.
+            delay = random.uniform(0.2, 1.0) * attempt
+            logger.info(
+                "Seed race with another worker (attempt %d) — retrying in %.1fs",
+                attempt, delay,
+            )
+            time.sleep(delay)
+
+
+def _seed_database_once() -> None:
     db = SessionLocal()
     try:
         for name, description in (
@@ -87,7 +116,11 @@ def seed_database() -> None:
 async def lifespan(app: FastAPI):
     settings.validate_for_environment()  # refuses unsafe production config
     settings.ensure_dirs()
-    Base.metadata.create_all(bind=engine)
+    # Development/test convenience only. Production schema is managed
+    # exclusively by Alembic — the container entrypoint runs
+    # `alembic upgrade head` and refuses to start the app if it fails.
+    if not settings.is_production:
+        Base.metadata.create_all(bind=engine)
     seed_database()
     logger.info("SentinelAI backend ready (env=%s).", settings.ENV)
     yield

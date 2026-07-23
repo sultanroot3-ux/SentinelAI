@@ -29,6 +29,9 @@ services:
   frontend:
     restart: unless-stopped
     logging: *logging
+    environment:
+      # Seconds between certificate-change checks (hot nginx reload on renewal)
+      - CERT_WATCH_INTERVAL=${CERT_WATCH_INTERVAL:-3600}
     ports: !override
       - "80:80"
       - "443:443"

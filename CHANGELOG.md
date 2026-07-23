@@ -3,6 +3,17 @@
 All notable changes to SentinelAI are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: [SemVer](https://semver.org/).
 
+## [1.0.2] — 2026-07-23
+
+Production-blocker fixes from the final engineering review. No new features.
+
+### Fixed
+- **Migrations (C1)**: container entrypoint runs `alembic upgrade head` and fails fast; `create_all` is development-only; automatic adoption (stamp) of unversioned v1.0.1 databases; verified fresh install / upgrade / rollback / failure paths
+- **TLS reload (C2)**: nginx hot-reloads automatically when certbot renews certificates (zero-downtime, verified by simulated renewal) — previously renewed certs were never loaded, guaranteeing an outage at first renewal
+- **Multi-worker embedding cache (C3)**: DB version-signature revalidation; newly enrolled faces recognized immediately by all workers (verified live with 2 workers)
+- **AI model persistence (C4)**: insightface + onnxruntime now included in the production image with the buffalo_l model baked in (SHA-256 pinned); fully offline-capable — previously the production image had no recognition engine and would download models at runtime
+- Multi-worker seed race: first startup with several workers could crash the losing worker on duplicate-key; now retried with jittered backoff
+
 ## [1.0.0] — 2026-07-23
 
 First production-ready release.

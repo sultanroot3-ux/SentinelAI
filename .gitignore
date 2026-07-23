@@ -35,3 +35,4 @@ backend/.env
 docker/certs/
 backups/
 docker/nginx.rendered.conf
+docker/models/*.zip

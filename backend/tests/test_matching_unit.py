@@ -75,3 +75,48 @@ def test_cosine_similarity_bounds():
     assert abs(face_service.cosine_similarity(a, a) - 1.0) < 1e-6
     assert abs(face_service.cosine_similarity(a, _unit([0, 1, 0]))) < 1e-6
     assert face_service.cosine_similarity(a, np.zeros(3, dtype=np.float32)) == 0.0
+
+
+def test_cross_worker_cache_revalidates_on_db_change(client, db_session=None):
+    """Simulates a second worker: cache marked valid, another process enrolls
+    (DB write + FaceEmbedding row) WITHOUT calling invalidate_embedding_cache.
+    The version signature must trigger a rebuild on the next lookup."""
+    from app.db.database import SessionLocal
+    from app.models.models import FaceEmbedding
+
+    db = SessionLocal()
+    try:
+        emb_a = _unit(np.r_[1.0, np.zeros(511)])
+        user_a = _make_user(db, "worker_cache_a", emb_a)
+        db.add(FaceEmbedding(user_id=user_a.id, embedding=emb_a.tobytes()))
+        db.commit()
+
+        # Worker 1 populates its cache
+        match, score = face_service._match_embedding(emb_a, db, threshold=0.9)
+        assert match is not None and match.id == user_a.id
+
+        # "Worker 2" enrolls a new user — no local invalidate call (that call
+        # happened in the other process). Only the DB changes.
+        emb_b = _unit(np.r_[0.0, 1.0, np.zeros(510)])
+        user_b = User(
+            name="Worker Cache B",
+            email="worker_cache_b@example.com",
+            username="worker_cache_b",
+            password_hash=hash_password("irrelevant-1"),
+            role="receptionist",
+            face_registered=True,
+            face_embedding=emb_b.astype(np.float32).tobytes(),
+        )
+        db.add(user_b)
+        db.flush()
+        db.add(FaceEmbedding(user_id=user_b.id, embedding=emb_b.tobytes()))
+        db.commit()
+
+        # This worker's cache is still flagged valid — but the signature
+        # changed, so the new user must be matched immediately.
+        match_b, score_b = face_service._match_embedding(emb_b, db, threshold=0.9)
+        assert match_b is not None and match_b.id == user_b.id, (
+            "stale cross-worker cache: new enrollment not visible"
+        )
+    finally:
+        db.close()

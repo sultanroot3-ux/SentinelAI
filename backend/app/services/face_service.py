@@ -247,7 +247,14 @@ def cosine_similarity(a, b) -> float:
 # In-memory embedding cache: one (N x 512) unit-normalized matrix, so matching
 # a face against ALL registered users is a single vectorized dot product per
 # frame instead of a per-user Python loop + full-table read.
-_EMBED_CACHE: dict = {"valid": False, "ids": None, "matrix": None}
+#
+# Multi-worker consistency: every lookup compares a cheap DB version signature
+# (row count + max id of face_embeddings — both change on every enrollment,
+# re-enrollment and cascade delete). A worker that did not handle the write
+# sees the signature change on its next frame and rebuilds — no restart, no
+# cross-process signalling. invalidate_embedding_cache() remains for same-
+# worker immediacy.
+_EMBED_CACHE: dict = {"valid": False, "ids": None, "matrix": None, "sig": None}
 
 
 def invalidate_embedding_cache() -> None:
@@ -255,9 +262,21 @@ def invalidate_embedding_cache() -> None:
     _EMBED_CACHE["valid"] = False
 
 
+def _embedding_version_signature(db: Session):
+    """Cheap cross-worker change signal for stored embeddings."""
+    from sqlalchemy import func
+
+    from app.models.models import FaceEmbedding
+
+    return db.query(
+        func.count(FaceEmbedding.id), func.max(FaceEmbedding.id)
+    ).one()
+
+
 def _get_embedding_matrix(db: Session):
     """Return (user_ids array, unit-normalized embedding matrix) or (None, None)."""
-    if not _EMBED_CACHE["valid"]:
+    sig = _embedding_version_signature(db)
+    if not _EMBED_CACHE["valid"] or _EMBED_CACHE["sig"] != sig:
         users = (
             db.query(User.id, User.face_embedding)
             .filter(User.face_registered.is_(True), User.face_embedding.isnot(None))
@@ -273,6 +292,7 @@ def _get_embedding_matrix(db: Session):
             rows.append(vec / norm)
         _EMBED_CACHE["ids"] = np.asarray(ids) if ids else None
         _EMBED_CACHE["matrix"] = np.stack(rows) if rows else None
+        _EMBED_CACHE["sig"] = sig
         _EMBED_CACHE["valid"] = True
     return _EMBED_CACHE["ids"], _EMBED_CACHE["matrix"]
 
