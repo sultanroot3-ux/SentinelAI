@@ -10,7 +10,7 @@ from app.api.utils import serialize_user
 from app.core.config import settings
 from app.core.security import get_current_user, hash_password, require_roles
 from app.db.database import get_db
-from app.models.models import User
+from app.models.models import FaceEmbedding, User
 from app.schemas.schemas import UserCreate, UserOut, UserUpdate
 from app.services import face_service
 from app.services.audit_service import write_audit
@@ -66,6 +66,11 @@ def create_user(
         department_id=payload.department_id,
         employee_id=payload.employee_id,
         access_level=payload.access_level,
+        job_title=payload.job_title,
+        office_building=payload.office_building,
+        badge_number=payload.badge_number,
+        phone=payload.phone,
+        status=payload.status or "active",
     )
     db.add(user)
     db.commit()
@@ -175,6 +180,10 @@ def upload_photo(
             )
         user.face_embedding = embedding.tobytes()
         user.face_registered = True
+        # Also record in the face_embeddings table (supports multiple
+        # enrollment photos per employee for the investigation system).
+        db.add(FaceEmbedding(user_id=user.id, embedding=embedding.tobytes(),
+                             model="buffalo_l"))
         note = "face embedding registered"
     else:
         # Photo stored; recognition needs insightface installed.

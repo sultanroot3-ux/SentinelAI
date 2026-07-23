@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.api.utils import serialize_user
 from app.core import rate_limit
+from app.core.net import client_ip
 from app.core.security import (
     consume_refresh_token,
     create_access_token,
@@ -27,14 +28,6 @@ from app.services.audit_service import write_audit
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
-def _client_ip(request: Request) -> str:
-    # Behind nginx the client IP arrives in X-Forwarded-For (first hop)
-    forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    return request.client.host if request.client else "unknown"
-
-
 @router.post("/login", response_model=LoginResponse)
 def login(
     payload: LoginRequest,
@@ -42,7 +35,7 @@ def login(
     response: Response,
     db: Session = Depends(get_db),
 ):
-    ip = _client_ip(request)
+    ip = client_ip(request)
     allowed, retry_after = rate_limit.check_allowed(payload.username, ip)
     if not allowed:
         response.headers["Retry-After"] = str(retry_after)

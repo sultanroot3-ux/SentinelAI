@@ -1,5 +1,32 @@
 # SentinelAI — Deployment Guide
 
+## Production: single command (recommended)
+
+On a fresh Ubuntu server with a DNS record pointing at it:
+
+```bash
+git clone <your-repo-url> sentinelai && cd sentinelai
+sudo bash deployment/install_ubuntu.sh --domain sentinel.example.com --email admin@example.com
+```
+
+This installs Docker, generates secrets into `.env`, obtains a Let's Encrypt
+certificate, renders the production nginx config, starts the full stack
+(PostgreSQL, backend, nginx on 80/443, certbot auto-renewal, daily backups)
+and smoke-tests `/api/health`. Idempotent — safe to re-run.
+
+LAN / IP-only deployments (no public domain):
+
+```bash
+sudo bash deployment/install_ubuntu.sh --self-signed
+```
+
+After install, see `docs/DEPLOYMENT_CHECKLIST.md` for the go-live checklist
+and `docs/ADMIN_MANUAL.md` for operations. Add monitoring with cron:
+
+```
+*/5 * * * *  /opt/sentinelai/deployment/monitor.sh || logger -t sentinelai "health FAILED"
+```
+
 ## Ubuntu Server (bare metal)
 
 ```bash

@@ -105,6 +105,56 @@ Status: `open`, `investigating`, `closed`. Priority: `low`, `medium`, `high`, `c
 
 Keys: `recognition_threshold` (float 0–1, default 0.45), `liveness_enabled` (bool), `camera_source` (str, default "0"), `notify_on_unknown` (bool).
 
+## Investigation System
+Identity data in every report comes exclusively from the local database.
+AI-derived attributes (age, gender, pose, mask/glasses, quality) are labelled
+estimates; attributes with no local model (emotion, object detection, OCR when
+tesseract is absent) are reported `unavailable`, never guessed.
+
+| Method | Path | Notes |
+|---|---|---|
+| POST | `/api/investigation/analyze` | multipart `file` + query `camera`; roles admin/security_officer. Full per-face report: DB profile or unknown-person registration + AI estimates + scene analysis |
+| GET | `/api/investigation/employee/{id}` | employee profile report + recognition history + watchlist hits |
+| GET | `/api/investigation/unknown/{id}` | unknown-person report + similar prior sightings (embedding match) |
+
+Unmatched faces are assigned an `unknown_person_id` (`UNK-000042`), and their
+snapshot, 512-d embedding, camera and timestamp are stored.
+
+## Cameras
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/api/cameras` | list with locations (any authenticated user) |
+| POST | `/api/cameras` | `{name, source, location_id, active}`; roles admin/it |
+| PUT/DELETE | `/api/cameras/{id}` | roles admin/it |
+| GET/POST | `/api/cameras/locations` | camera locations (`{name, building, floor, room}`) |
+
+## Watchlists
+| Method | Path | Notes |
+|---|---|---|
+| GET/POST | `/api/watchlists` | roles admin/security_officer; `{name, description, level, active}` |
+| POST | `/api/watchlists/{id}/entries` | exactly one of `user_id` / `unknown_face_id`, + `reason` |
+| DELETE | `/api/watchlists/{id}` and `/entries/{entry_id}` | |
+
+Watchlist hits appear in investigation reports for both employees and unknowns.
+
+## Visitors
+| Method | Path | Notes |
+|---|---|---|
+| GET/POST | `/api/visitors` | roles admin/security_officer/receptionist |
+| PUT | `/api/visitors/{id}` | |
+| POST | `/api/visitors/{id}/check-in`, `/check-out` | writes `access_history` events |
+
+## Access history
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/api/access-history` | paginated; filters `user_id`, `visitor_id`, `unknown_face_id`, `event`. Fed by live recognition, investigations and visitor check-in/out |
+
+## RBAC catalogue
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/api/rbac/roles` | roles with their permissions (seeded) |
+| GET | `/api/rbac/permissions` | full permission list |
+
 ## Static
 - `/static/uploads/...` — user photos
 - `/static/unknown_faces/...` — unknown snapshots

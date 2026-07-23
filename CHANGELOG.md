@@ -9,13 +9,14 @@ First production-ready release.
 
 ### Added
 - **AI engine**: InsightFace (ArcFace, buffalo_l) face recognition with 512-d embeddings; OpenCV Haar-cascade fallback; face registration via photo upload; unknown-visitor pipeline (snapshot → case management → notifications); temporal liveness detection (blink + non-rigid motion + head-pose micro-movement)
-- **Backend**: FastAPI with 13 routers (auth, users, departments, recognition, camera, logs, unknown, cases, analytics, reports, notifications, settings, health); PostgreSQL via SQLAlchemy 2 + Alembic migrations with zero-config SQLite fallback
-- **Authentication**: JWT access tokens (30 min) + single-use rotating refresh tokens (7 days) with server-side revocation; login rate limiting (5 attempts / 15 min per username+IP); RBAC (admin, security officer, receptionist, IT); bcrypt hashing; forced password change for seeded accounts; audit logging
-- **Dashboard**: React (Vite) with 13 pages, dark/light themes, live MJPEG camera feed with server-side AI overlay, SVG analytics charts, investigation case workflow
+- **Enterprise Investigation System**: full investigation reports (database-only identity, camera + location, recognition history, watchlist hits, snapshot); unknown persons get stable `UNK-xxxxxx` IDs with stored embeddings and similar-sighting linkage; AI attribute estimates (age, gender, head pose, face quality, blur, brightness, mask/glasses heuristics) — every value labelled an estimate, absent models report `unavailable`; RBAC catalogue (4 roles × 13 permissions); cameras + locations registry; visitor management with check-in/out; watchlists with alert levels; access-history timeline; read-only audit viewer
+- **Backend**: FastAPI with 21 routers; PostgreSQL via SQLAlchemy 2 + Alembic migrations (19 tables) with zero-config SQLite fallback
+- **Authentication**: JWT access tokens (30 min) + single-use rotating refresh tokens (7 days) with server-side revocation; login rate limiting (5 attempts / 15 min per username+IP); RBAC (admin, security officer, receptionist, IT); bcrypt hashing; forced password change for seeded accounts; audit logging; biometric media behind short-lived signed URLs
+- **Dashboard**: React (Vite) with 21 pages, role-gated navigation, dark/light themes, mobile responsive, live MJPEG camera feed with server-side AI overlay, SVG analytics charts, investigation workflow
 - **Notifications**: in-app + Email (SMTP) + Telegram + Discord, configurable from the dashboard with masked secrets
 - **Reports**: CSV / JSON / PDF / Excel exports (daily, weekly, monthly)
-- **Ops**: Docker Compose (PostgreSQL + backend + nginx with TLS); HTTPS with security headers (HSTS, CSP, X-Frame-Options); automated PostgreSQL backup script with retention; `/api/health` endpoint; rotating file logs
-- **Quality**: 79-test pytest suite (unit + integration) run in CI against both SQLite and PostgreSQL, plus frontend build job
+- **Ops**: one-command Ubuntu production install (`deployment/install_ubuntu.sh`); Docker Compose production stack (PostgreSQL 16, non-root multi-stage backend image, nginx TLS termination on 80/443, Let's Encrypt auto-renewal, daily gzip backups with retention, healthchecks, log rotation); health-monitoring cron script; performance/load test report
+- **Quality**: 123-test pytest suite (unit + integration) run in CI against both SQLite and PostgreSQL; frontend build job; Docker image build + production compose validation in CI; Playwright E2E over all 20 authenticated pages
 
 ### Fixed (during development, pre-release)
 - OpenCV 5 removed `CascadeClassifier` — pinned `opencv-python < 5`

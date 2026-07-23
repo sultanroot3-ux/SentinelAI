@@ -5,6 +5,14 @@ import Layout from './components/Layout';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import LiveCamera from './pages/LiveCamera';
+import Investigation from './pages/Investigation';
+import Cameras from './pages/Cameras';
+import CameraLocations from './pages/CameraLocations';
+import Visitors from './pages/Visitors';
+import Watchlists from './pages/Watchlists';
+import Rbac from './pages/Rbac';
+import AuditLogs from './pages/AuditLogs';
+import AccessHistory from './pages/AccessHistory';
 import VisitorLogs from './pages/VisitorLogs';
 import UnknownVisitors from './pages/UnknownVisitors';
 import Cases from './pages/Cases';
@@ -27,6 +35,14 @@ export default function App() {
               <Route element={<Layout />}>
                 <Route path="/" element={<Dashboard />} />
                 <Route path="/live" element={<LiveCamera />} />
+                <Route path="/investigation" element={<Investigation />} />
+                <Route path="/cameras" element={<Cameras />} />
+                <Route path="/camera-locations" element={<CameraLocations />} />
+                <Route path="/visitors" element={<Visitors />} />
+                <Route path="/watchlists" element={<Watchlists />} />
+                <Route path="/rbac" element={<Rbac />} />
+                <Route path="/audit" element={<AuditLogs />} />
+                <Route path="/access-history" element={<AccessHistory />} />
                 <Route path="/logs" element={<VisitorLogs />} />
                 <Route path="/unknown" element={<UnknownVisitors />} />
                 <Route path="/cases" element={<Cases />} />

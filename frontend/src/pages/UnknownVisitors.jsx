@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api, asPage } from '../api/client';
 import Badge from '../components/Badge';
 import Modal from '../components/Modal';
@@ -13,6 +14,7 @@ const STATUSES = ['', 'new', 'reviewed', 'case_opened'];
 const PAGE_SIZE = 12;
 
 export default function UnknownVisitors() {
+  const navigate = useNavigate();
   const toast = useToast();
   const [status, setStatus] = useState('');
   const [page, setPage] = useState(1);
@@ -142,6 +144,12 @@ export default function UnknownVisitors() {
                   <div className="muted-text">{fmtDateTime(item.timestamp)}</div>
                   {item.case_id && <div className="muted-text">Case #{item.case_id}</div>}
                   <div className="unknown-card-actions">
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => navigate(`/investigation?unknown=${item.id}`)}
+                    >
+                      <Icon name="eye" size={14} /> Investigate
+                    </button>
                     {item.status !== 'reviewed' && item.status !== 'case_opened' && (
                       <button className="btn btn-ghost btn-sm" onClick={() => markReviewed(item)}>
                         <Icon name="check" size={14} /> Reviewed

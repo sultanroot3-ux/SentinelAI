@@ -19,7 +19,13 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.models.models import RecognitionLog, UnknownFace, User
+from app.models.models import (
+    AccessHistory,
+    FaceEmbedding,
+    RecognitionLog,
+    UnknownFace,
+    User,
+)
 from app.services import notification_service
 from app.services.settings_service import get_setting
 
@@ -383,7 +389,7 @@ def process_image(img, db: Session, camera: str = "webcam",
                 )
             else:
                 if not spoof:
-                    _record_unknown(db, img, box, camera)
+                    _record_unknown(db, img, box, camera, embedding=embedding)
                 results.append(
                     {
                         "box": box,
@@ -419,19 +425,31 @@ def process_image(img, db: Session, camera: str = "webcam",
     return results
 
 
+def _camera_id_for(db: Session, camera: str) -> int | None:
+    """Resolve a camera name to its Camera row id (None if not registered)."""
+    from app.services.rbac_service import get_camera_by_name
+
+    cam = get_camera_by_name(db, camera)
+    return cam.id if cam else None
+
+
 def _record_recognition(db: Session, user: User, camera: str, score: float) -> None:
-    """Persist a RecognitionLog, at most once per user per cooldown window."""
+    """Persist a RecognitionLog + AccessHistory, once per user per cooldown."""
     now = time.monotonic()
     last = _last_user_logged_at.get(user.id, 0.0)
     if now - last < _RECOG_LOG_COOLDOWN_SECONDS:
         return
     _last_user_logged_at[user.id] = now
-    db.add(RecognitionLog(user_id=user.id, camera=camera, score=round(score, 4)))
+    camera_id = _camera_id_for(db, camera)
+    db.add(RecognitionLog(user_id=user.id, camera=camera, camera_id=camera_id,
+                          score=round(score, 4)))
+    db.add(AccessHistory(user_id=user.id, camera_id=camera_id, event="detected",
+                         detail=f"Live recognition (score {score:.2f})"))
     db.commit()
 
 
-def _record_unknown(db: Session, img, box, camera: str) -> None:
-    """Persist an UnknownFace row + alert notification, rate-limited."""
+def _record_unknown(db: Session, img, box, camera: str, embedding=None) -> None:
+    """Persist an UnknownFace row (+ id, embedding, access history), rate-limited."""
     global _last_unknown_saved_at
     now = time.monotonic()
     if now - _last_unknown_saved_at < _UNKNOWN_COOLDOWN_SECONDS:
@@ -439,8 +457,17 @@ def _record_unknown(db: Session, img, box, camera: str) -> None:
     _last_unknown_saved_at = now
 
     snapshot_url = _save_unknown_snapshot(img, box)
-    unknown = UnknownFace(snapshot_url=snapshot_url, camera=camera, status="new")
+    camera_id = _camera_id_for(db, camera)
+    unknown = UnknownFace(snapshot_url=snapshot_url, camera=camera,
+                          camera_id=camera_id, status="new")
     db.add(unknown)
+    db.flush()
+    unknown.unknown_person_id = f"UNK-{unknown.id:06d}"
+    if embedding is not None:
+        db.add(FaceEmbedding(unknown_face_id=unknown.id,
+                             embedding=embedding.tobytes(), model="buffalo_l"))
+    db.add(AccessHistory(unknown_face_id=unknown.id, camera_id=camera_id,
+                         event="detected", detail="Live detection: unregistered person"))
     db.commit()
 
     if get_setting(db, "notify_on_unknown", True):

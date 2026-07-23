@@ -30,6 +30,11 @@ class UserOut(BaseModel):
     employee_id: str | None = None
     access_level: str | None = None
     photo_url: str | None = None
+    job_title: str | None = None
+    office_building: str | None = None
+    badge_number: str | None = None
+    phone: str | None = None
+    status: str = "active"
     face_registered: bool = False
     must_change_password: bool = False
     created_at: datetime
@@ -61,6 +66,11 @@ class UserCreate(BaseModel):
     department_id: int | None = None
     employee_id: str | None = None
     access_level: str | None = None
+    job_title: str | None = None
+    office_building: str | None = None
+    badge_number: str | None = None
+    phone: str | None = None
+    status: Literal["active", "inactive"] | None = "active"
 
 
 class UserUpdate(BaseModel):
@@ -72,6 +82,11 @@ class UserUpdate(BaseModel):
     department_id: int | None = None
     employee_id: str | None = None
     access_level: str | None = None
+    job_title: str | None = None
+    office_building: str | None = None
+    badge_number: str | None = None
+    phone: str | None = None
+    status: Literal["active", "inactive"] | None = None
 
 
 # ---------- Departments ----------
@@ -234,6 +249,200 @@ class NotificationOut(BaseModel):
     level: str
     read: bool
     created_at: datetime
+
+
+# ---------- RBAC catalogue ----------
+class PermissionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    code: str
+    description: str | None = None
+
+
+class RoleOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    description: str | None = None
+    permissions: list[PermissionOut] = []
+
+
+# ---------- Cameras ----------
+class CameraLocationCreate(BaseModel):
+    name: str
+    building: str | None = None
+    floor: str | None = None
+    room: str | None = None
+    description: str | None = None
+
+
+class CameraLocationOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    building: str | None = None
+    floor: str | None = None
+    room: str | None = None
+    description: str | None = None
+
+
+class CameraCreate(BaseModel):
+    name: str
+    source: str = "0"
+    location_id: int | None = None
+    active: bool = True
+
+
+class CameraUpdate(BaseModel):
+    name: str | None = None
+    source: str | None = None
+    location_id: int | None = None
+    active: bool | None = None
+
+
+class CameraOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    source: str
+    location_id: int | None = None
+    location: CameraLocationOut | None = None
+    active: bool
+    created_at: datetime
+
+
+# ---------- Visitors ----------
+VisitorStatus = Literal["expected", "checked_in", "checked_out"]
+
+
+class VisitorCreate(BaseModel):
+    name: str
+    company: str | None = None
+    purpose: str | None = None
+    host_user_id: int | None = None
+    badge_number: str | None = None
+
+
+class VisitorUpdate(BaseModel):
+    name: str | None = None
+    company: str | None = None
+    purpose: str | None = None
+    host_user_id: int | None = None
+    badge_number: str | None = None
+
+
+class VisitorOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    company: str | None = None
+    purpose: str | None = None
+    host_user_id: int | None = None
+    host_name: str | None = None
+    badge_number: str | None = None
+    photo_url: str | None = None
+    status: str
+    check_in: datetime | None = None
+    check_out: datetime | None = None
+    created_at: datetime
+
+
+# ---------- Watchlists ----------
+class WatchlistCreate(BaseModel):
+    name: str
+    description: str | None = None
+    level: NotificationLevel = "warning"
+    active: bool = True
+
+
+class WatchlistEntryCreate(BaseModel):
+    user_id: int | None = None
+    unknown_face_id: int | None = None
+    reason: str | None = None
+
+
+class WatchlistEntryOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    watchlist_id: int
+    user_id: int | None = None
+    user_name: str | None = None
+    unknown_face_id: int | None = None
+    unknown_person_id: str | None = None
+    reason: str | None = None
+    added_by: int | None = None
+    created_at: datetime
+
+
+class WatchlistOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    description: str | None = None
+    level: str
+    active: bool
+    created_at: datetime
+    entries: list[WatchlistEntryOut] = []
+
+
+# ---------- Access history ----------
+class AccessHistoryOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    user_id: int | None = None
+    user_name: str | None = None
+    visitor_id: int | None = None
+    visitor_name: str | None = None
+    unknown_face_id: int | None = None
+    camera_id: int | None = None
+    camera_name: str | None = None
+    event: str
+    detail: str | None = None
+    timestamp: datetime
+
+
+class PaginatedAccessHistory(BaseModel):
+    items: list[AccessHistoryOut]
+    total: int
+    page: int
+
+
+# ---------- Audit ----------
+class AuditLogOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    user_id: int | None = None
+    username: str | None = None
+    action: str
+    detail: str | None = None
+    timestamp: datetime
+
+
+class PaginatedAudit(BaseModel):
+    items: list[AuditLogOut]
+    total: int
+    page: int
+
+
+# ---------- Investigation ----------
+class InvestigationResponse(BaseModel):
+    """Free-form report: faces carry DB identity fields + labelled AI estimates."""
+
+    faces: list[dict[str, Any]]
+    scene: dict[str, Any] | None = None
+    camera: str | None = None
+    analyzed_at: str | None = None
+    data_policy: str | None = None
+    error: str | None = None
 
 
 # ---------- Settings ----------

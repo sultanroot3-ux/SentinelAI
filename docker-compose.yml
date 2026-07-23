@@ -1,5 +1,10 @@
 # Secrets come from a `.env` file next to this compose file (see .env.example).
 # Compose refuses to start if they are missing — no baked-in defaults.
+
+# Stable project name: volume/network names stay `sentinelai_*` regardless of
+# the checkout directory (deployment/install_ubuntu.sh depends on this).
+name: sentinelai
+
 services:
   db:
     image: postgres:16-alpine

@@ -1,5 +1,9 @@
 # SentinelAI — Installation Guide
 
+> **Production install?** Use the single-command deployment instead:
+> `sudo bash deployment/install_ubuntu.sh --domain <fqdn> --email <email>`
+> — see `deployment/DEPLOYMENT.md`. This guide covers **development** setups.
+
 ## Prerequisites
 
 | Requirement | Version | Notes |

@@ -38,6 +38,26 @@ def test_rate_limit_is_per_username(client):
     assert _login(client, "admin", "admin123").status_code == 200
 
 
+def test_xff_spoofing_cannot_bypass_lockout(client):
+    """CRITICAL-2: rotating X-Forwarded-For must NOT reset the per-IP counter.
+
+    With no trusted proxies configured (test default), XFF is ignored entirely,
+    so all attempts share the real peer IP and the lockout still triggers.
+    """
+    victim = "xff-bypass-target"
+    codes = []
+    for i in range(6):
+        resp = client.post(
+            "/api/auth/login",
+            json={"username": victim, "password": "wrong"},
+            headers={"X-Forwarded-For": f"10.0.0.{i}"},  # different spoof each time
+        )
+        codes.append(resp.status_code)
+    # The 6th attempt must be locked out despite every request faking a new IP
+    assert codes[-1] == 429, codes
+    assert 429 in codes
+
+
 def test_success_clears_failure_counter(client):
     for _ in range(4):
         _login(client, "admin", "wrong")

@@ -6,14 +6,23 @@ import { getTheme, setTheme } from '../theme';
 import { titleCase } from '../utils/format';
 import Icon from './Icons';
 
+// `roles`: only these roles see the item (backend enforces regardless).
 const NAV = [
   { to: '/', label: 'Dashboard', icon: 'dashboard' },
   { to: '/live', label: 'Live Camera', icon: 'camera' },
+  { to: '/investigation', label: 'Investigation', icon: 'eye', roles: ['admin', 'security_officer'] },
   { to: '/logs', label: 'Visitor Logs', icon: 'logs' },
   { to: '/unknown', label: 'Unknown Visitors', icon: 'unknown' },
   { to: '/cases', label: 'Cases', icon: 'cases' },
+  { to: '/visitors', label: 'Visitors', icon: 'logs', roles: ['admin', 'security_officer', 'receptionist'] },
+  { to: '/access-history', label: 'Access History', icon: 'shield', roles: ['admin', 'security_officer', 'receptionist'] },
+  { to: '/watchlists', label: 'Watchlists', icon: 'alert', roles: ['admin', 'security_officer'] },
+  { to: '/cameras', label: 'Cameras', icon: 'camera', roles: ['admin', 'it', 'security_officer'] },
+  { to: '/camera-locations', label: 'Camera Locations', icon: 'departments', roles: ['admin', 'it', 'security_officer'] },
   { to: '/users', label: 'Users', icon: 'users' },
   { to: '/departments', label: 'Departments', icon: 'departments' },
+  { to: '/rbac', label: 'Roles & Permissions', icon: 'shield', roles: ['admin', 'security_officer', 'it'] },
+  { to: '/audit', label: 'Audit Log', icon: 'cases', roles: ['admin', 'security_officer'] },
   { to: '/reports', label: 'Reports', icon: 'reports' },
   { to: '/analytics', label: 'Analytics', icon: 'analytics' },
   { to: '/notifications', label: 'Notifications', icon: 'bell' },
@@ -81,7 +90,7 @@ export default function Layout() {
           </span>
         </div>
         <nav className="sidebar-nav">
-          {NAV.map((item) => (
+          {NAV.filter((item) => !item.roles || item.roles.includes(user?.role)).map((item) => (
             <NavLink
               key={item.to}
               to={item.to}

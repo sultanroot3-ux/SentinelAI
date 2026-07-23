@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import DataTable from '../components/DataTable';
 import Badge from '../components/Badge';
@@ -17,11 +18,17 @@ const EMPTY_FORM = {
   role: 'receptionist',
   department_id: '',
   employee_id: '',
-  access_level: 1,
+  access_level: '',
+  job_title: '',
+  office_building: '',
+  badge_number: '',
+  phone: '',
+  status: 'active',
 };
 
 export default function Users() {
   const toast = useToast();
+  const navigate = useNavigate();
   const [users, setUsers] = useState(null);
   const [departments, setDepartments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -75,7 +82,12 @@ export default function Users() {
       role: u.role || 'receptionist',
       department_id: u.department_id ?? '',
       employee_id: u.employee_id || '',
-      access_level: u.access_level ?? 1,
+      access_level: u.access_level ?? '',
+      job_title: u.job_title || '',
+      office_building: u.office_building || '',
+      badge_number: u.badge_number || '',
+      phone: u.phone || '',
+      status: u.status || 'active',
     });
     setFormError('');
     setEditing(u);
@@ -92,7 +104,12 @@ export default function Users() {
         role: form.role,
         department_id: form.department_id === '' ? null : Number(form.department_id),
         employee_id: form.employee_id,
-        access_level: Number(form.access_level),
+        access_level: form.access_level === '' ? null : String(form.access_level),
+        job_title: form.job_title.trim() || null,
+        office_building: form.office_building.trim() || null,
+        badge_number: form.badge_number.trim() || null,
+        phone: form.phone.trim() || null,
+        status: form.status,
       };
       if (editing === 'new') {
         payload.password = form.password;
@@ -215,7 +232,22 @@ export default function Users() {
               render: (u) => u.department_name || '—',
             },
             { key: 'employee_id', label: 'Employee ID' },
+            { key: 'job_title', label: 'Job Title', render: (u) => u.job_title || '—' },
+            {
+              key: 'badge_number',
+              label: 'Badge',
+              render: (u) => u.badge_number || '—',
+            },
             { key: 'access_level', label: 'Access' },
+            {
+              key: 'status',
+              label: 'Status',
+              render: (u) => (
+                <Badge value={u.status === 'active' ? 'online' : 'offline'}>
+                  {u.status || 'active'}
+                </Badge>
+              ),
+            },
             {
               key: 'face_registered',
               label: 'Face',
@@ -232,6 +264,13 @@ export default function Users() {
               sortable: false,
               render: (u) => (
                 <div className="row-actions" onClick={(e) => e.stopPropagation()}>
+                  <button
+                    className="icon-btn"
+                    title="Investigation report"
+                    onClick={() => navigate(`/investigation?employee=${u.id}`)}
+                  >
+                    <Icon name="eye" size={15} />
+                  </button>
                   <button className="icon-btn" title="Upload photo" onClick={() => pickPhoto(u)}>
                     <Icon name="upload" size={15} />
                   </button>
@@ -335,12 +374,49 @@ export default function Users() {
           <div className="form-field">
             <label>Access Level</label>
             <input
-              type="number"
-              min="1"
-              max="10"
               value={form.access_level}
+              placeholder="e.g. full, standard, restricted"
               onChange={(e) => setForm((f) => ({ ...f, access_level: e.target.value }))}
             />
+          </div>
+          <div className="form-field">
+            <label>Job Title</label>
+            <input
+              value={form.job_title}
+              onChange={(e) => setForm((f) => ({ ...f, job_title: e.target.value }))}
+            />
+          </div>
+          <div className="form-field">
+            <label>Office / Building</label>
+            <input
+              value={form.office_building}
+              onChange={(e) => setForm((f) => ({ ...f, office_building: e.target.value }))}
+            />
+          </div>
+          <div className="form-field">
+            <label>Badge Number</label>
+            <input
+              value={form.badge_number}
+              onChange={(e) => setForm((f) => ({ ...f, badge_number: e.target.value }))}
+            />
+          </div>
+          <div className="form-field">
+            <label>Phone</label>
+            <input
+              type="tel"
+              value={form.phone}
+              onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
+            />
+          </div>
+          <div className="form-field">
+            <label>Status</label>
+            <select
+              value={form.status}
+              onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}
+            >
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+            </select>
           </div>
         </div>
         {formError && <div className="error-text spaced-top">{formError}</div>}

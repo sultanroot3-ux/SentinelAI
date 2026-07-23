@@ -11,23 +11,31 @@ from app.core.logging_config import setup_logging
 from app.core.security import hash_password
 from app.db.database import Base, SessionLocal, engine
 from app.models.models import Department, User
+from app.services.rbac_service import seed_default_camera, seed_rbac
 from app.services.settings_service import seed_default_settings
 
 from app.api import (
+    access_history,
+    audit,
     analytics,
     auth,
     camera,
+    cameras,
     cases,
     departments,
     health,
+    investigation,
     logs,
     media,
     notifications,
+    rbac,
     recognition,
     reports,
     settings as settings_api,
     unknown,
     users,
+    visitors,
+    watchlists,
 )
 
 setup_logging()
@@ -69,6 +77,8 @@ def seed_database() -> None:
             logger.info("Seeded default admin user (admin / admin123)")
 
         seed_default_settings(db)
+        seed_rbac(db)
+        seed_default_camera(db)
     finally:
         db.close()
 
@@ -143,6 +153,13 @@ app.include_router(analytics.router)
 app.include_router(reports.router)
 app.include_router(notifications.router)
 app.include_router(settings_api.router)
+app.include_router(investigation.router)
+app.include_router(cameras.router)
+app.include_router(watchlists.router)
+app.include_router(visitors.router)
+app.include_router(access_history.router)
+app.include_router(rbac.router)
+app.include_router(audit.router)
 
 
 @app.get("/")

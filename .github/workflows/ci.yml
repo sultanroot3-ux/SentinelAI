@@ -85,3 +85,37 @@ jobs:
         run: |
           npm ci
           npm run build
+
+  docker-build:
+    name: Docker images build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/backend.Dockerfile
+          push: false
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,scope=backend,mode=max
+
+      - name: Build frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/frontend.Dockerfile
+          push: false
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,scope=frontend,mode=max
+
+      - name: Validate production compose config
+        run: |
+          cp .env.example .env
+          sed -i 's/^SENTINEL_SECRET_KEY=$/SENTINEL_SECRET_KEY=ci-validate-only/' .env
+          sed -i 's/^SENTINEL_DB_PASSWORD=$/SENTINEL_DB_PASSWORD=ci-validate-only/' .env
+          touch docker/nginx.rendered.conf
+          docker compose -f docker-compose.yml -f docker-compose.prod.yml config -q

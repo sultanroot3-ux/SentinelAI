@@ -56,6 +56,12 @@ class Settings(BaseSettings):
 
     CORS_ORIGINS: list[str] = ["http://localhost:5173"]
 
+    # Reverse proxies whose X-Forwarded-For header may be trusted for client-IP
+    # resolution (rate limiting). Empty = trust nothing (XFF ignored). Set to
+    # the proxy/LB address or CIDR in production, e.g. ["172.16.0.0/12"] for the
+    # Docker compose network. Accepts single IPs and CIDR ranges.
+    TRUSTED_PROXY_IPS: list[str] = []
+
     @property
     def database_url(self) -> str:
         """Configured DATABASE_URL (PostgreSQL) or the SQLite file fallback."""
