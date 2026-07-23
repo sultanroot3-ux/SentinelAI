@@ -8,6 +8,7 @@ const DEFAULTS = {
   liveness_enabled: false,
   camera_source: '0',
   notify_on_unknown: true,
+  unknown_retention_days: 0,
   email_enabled: false,
   smtp_host: '',
   smtp_port: 587,
@@ -45,6 +46,7 @@ export default function Settings() {
           liveness_enabled: toBool(d?.liveness_enabled ?? DEFAULTS.liveness_enabled),
           camera_source: String(d?.camera_source ?? DEFAULTS.camera_source),
           notify_on_unknown: toBool(d?.notify_on_unknown ?? DEFAULTS.notify_on_unknown),
+          unknown_retention_days: Number(d?.unknown_retention_days ?? DEFAULTS.unknown_retention_days),
           email_enabled: toBool(d?.email_enabled ?? DEFAULTS.email_enabled),
           smtp_host: String(d?.smtp_host ?? DEFAULTS.smtp_host),
           smtp_port: Number(d?.smtp_port ?? DEFAULTS.smtp_port),
@@ -74,6 +76,7 @@ export default function Settings() {
         liveness_enabled: form.liveness_enabled,
         camera_source: form.camera_source,
         notify_on_unknown: form.notify_on_unknown,
+        unknown_retention_days: Number(form.unknown_retention_days),
         email_enabled: form.email_enabled,
         smtp_host: form.smtp_host,
         smtp_port: Number(form.smtp_port),
@@ -154,6 +157,27 @@ export default function Settings() {
           />
           <span className="muted-text">
             A local device index like <code>0</code>, or an RTSP/HTTP stream URL.
+          </span>
+        </div>
+
+        <h2 className="section-gap">Data Retention</h2>
+        <div className="form-field">
+          <label>Unknown-visitor retention (days)</label>
+          <input
+            type="number"
+            min="0"
+            max="3650"
+            value={form.unknown_retention_days}
+            onChange={(e) =>
+              setForm((f) => ({ ...f, unknown_retention_days: e.target.value }))
+            }
+          />
+          <span className="muted-text">
+            Automatically delete unknown-visitor records (snapshot, face
+            embedding and database entry) older than this many days.{' '}
+            <code>0</code> disables purging. Records linked to a case or on a
+            watchlist are never purged. Every purge is written to the audit
+            log.
           </span>
         </div>
 

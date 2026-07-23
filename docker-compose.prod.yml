@@ -66,10 +66,36 @@ services:
     volumes:
       - ./backups:/backups
       - ./deployment/backup_loop.sh:/backup_loop.sh:ro
+      # media volume (read-only) so uploads + snapshots are backed up too
+      - sentinel-data:/data:ro
     depends_on:
       db:
         condition: service_healthy
     entrypoint: ["/bin/sh", "/backup_loop.sh"]
+    logging: *logging
+
+  # Offsite backup replication (H4) — opt-in via:
+  #   docker compose --profile offsite -f docker-compose.yml -f docker-compose.prod.yml up -d
+  # Configure the target with rclone env vars in .env, e.g. for S3:
+  #   OFFSITE_REMOTE=offsite:my-bucket/sentinelai
+  #   RCLONE_CONFIG_OFFSITE_TYPE=s3
+  #   RCLONE_CONFIG_OFFSITE_PROVIDER=AWS
+  #   RCLONE_CONFIG_OFFSITE_ACCESS_KEY_ID=...
+  #   RCLONE_CONFIG_OFFSITE_SECRET_ACCESS_KEY=...
+  #   RCLONE_CONFIG_OFFSITE_REGION=eu-central-1
+  # Any rclone backend works (SFTP/SCP, Backblaze, GCS, Azure, ...).
+  offsite:
+    image: rclone/rclone:1.68
+    profiles: ["offsite"]
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - OFFSITE_REMOTE=${OFFSITE_REMOTE:-}
+      - OFFSITE_INTERVAL=${OFFSITE_INTERVAL:-21600}
+    volumes:
+      - ./backups:/backups:ro
+      - ./deployment/offsite_sync.sh:/offsite_sync.sh:ro
+    entrypoint: ["/bin/sh", "/offsite_sync.sh"]
     logging: *logging
 
 volumes:

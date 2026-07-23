@@ -133,6 +133,11 @@ class CameraStatus(BaseModel):
     source: str
 
 
+class StreamTokenResponse(BaseModel):
+    stream_token: str
+    expires_in: int  # seconds
+
+
 # ---------- Logs ----------
 class RecognitionLogOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -450,6 +455,7 @@ class SettingsUpdate(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     recognition_threshold: float | None = Field(default=None, ge=0.0, le=1.0)
+    unknown_retention_days: int | None = Field(default=None, ge=0, le=3650)
     liveness_enabled: bool | None = None
     camera_source: str | None = None
     notify_on_unknown: bool | None = None

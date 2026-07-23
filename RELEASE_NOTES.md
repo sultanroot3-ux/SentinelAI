@@ -1,3 +1,39 @@
+# SentinelAI v1.0.3 — Release Notes
+
+**Release date:** 2026-07-24
+
+v1.0.3 completes the HIGH-priority production requirements from the engineering
+review (H1–H4). No new product features.
+
+## Enterprise-readiness hardening
+
+- **H1 — Biometric data retention.** New `unknown_retention_days` setting
+  (Settings → Data Retention; default 0 = disabled). A background job purges
+  unknown-person records — snapshot, embedding, and DB row — older than the
+  window; records linked to a case or on a watchlist are never purged; every
+  purge is written to the audit log. Documented in `docs/DATA_RETENTION.md`.
+  Verified by 7 backend tests + in-browser settings check.
+- **H2 — Log-safe MJPEG authentication.** The live stream no longer accepts
+  the 30-minute API access token in its URL. The dashboard fetches a
+  single-purpose **60-second stream token** (`POST /api/camera/stream-token`);
+  access tokens are rejected on the stream, stream tokens are rejected on the
+  API. nginx additionally logs request paths without query strings. Verified
+  live: access token → 401, stream token → accepted, **zero `token=` in nginx
+  logs**; plus 6 backend tests.
+- **H3 — Complete media backups.** The daily backup service now produces a
+  matched pair — database dump **and** a media tarball (enrollment photos +
+  evidence snapshots). Verified end to end with a clean-environment restore
+  (DB + media into fresh volumes) and a cross-integrity check that a restored
+  `photo_url` resolves to a restored file.
+- **H4 — Offsite backups.** Optional `offsite` compose profile replicates
+  `./backups` to any rclone-supported target (S3, SCP/SFTP, B2, GCS, Azure…)
+  and **verifies every transfer** with `rclone check`. Verified: sync loop
+  reported `0 differences, 4 matching files`. See `docs/BACKUP_RESTORE.md`.
+
+Upgrade: `git pull && docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build`.
+
+---
+
 # SentinelAI v1.0.2 — Release Notes
 
 **Release date:** 2026-07-23

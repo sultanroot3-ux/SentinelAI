@@ -114,9 +114,38 @@ def decode_token(token: str) -> dict:
 
 def get_user_from_token(token: str, db: Session) -> User:
     payload = decode_token(token)
-    # Refresh tokens must never work as access tokens
-    if payload.get("type") == "refresh":
-        raise HTTPException(status_code=401, detail="Refresh token cannot be used for access")
+    # Only access tokens grant API access — refresh and single-purpose stream
+    # tokens must never work here.
+    if payload.get("type") != "access":
+        raise HTTPException(status_code=401, detail="Not an access token")
+    user = db.get(User, int(payload.get("sub", 0)))
+    if user is None:
+        raise HTTPException(status_code=401, detail="User no longer exists")
+    return user
+
+
+# ---------------------------------------------------------------------------
+# Stream tokens: short-lived, single-purpose credentials for MJPEG <img> URLs.
+# Access tokens must not appear in URLs (web-server logs would capture a
+# reusable 30-minute credential); a stream token that leaks via logs is
+# useless within a minute and never grants API access.
+# ---------------------------------------------------------------------------
+STREAM_TOKEN_EXPIRE_SECONDS = 60
+
+
+def create_stream_token(user: User) -> str:
+    expire = datetime.now(timezone.utc) + timedelta(
+        seconds=STREAM_TOKEN_EXPIRE_SECONDS
+    )
+    payload = {"sub": str(user.id), "type": "stream", "exp": expire}
+    return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+
+
+def get_user_from_stream_token(token: str, db: Session) -> User:
+    """Validate a stream token (and only a stream token)."""
+    payload = decode_token(token)
+    if payload.get("type") != "stream":
+        raise HTTPException(status_code=401, detail="Not a stream token")
     user = db.get(User, int(payload.get("sub", 0)))
     if user is None:
         raise HTTPException(status_code=401, detail="User no longer exists")

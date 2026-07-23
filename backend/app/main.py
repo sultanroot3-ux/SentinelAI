@@ -122,8 +122,15 @@ async def lifespan(app: FastAPI):
     if not settings.is_production:
         Base.metadata.create_all(bind=engine)
     seed_database()
+    # Biometric retention purge (no-op while unknown_retention_days == 0)
+    import asyncio
+
+    from app.services.retention_service import retention_loop
+
+    retention_task = asyncio.create_task(retention_loop())
     logger.info("SentinelAI backend ready (env=%s).", settings.ENV)
     yield
+    retention_task.cancel()
 
 
 app = FastAPI(title=settings.APP_NAME, lifespan=lifespan)

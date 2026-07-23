@@ -50,6 +50,13 @@ def _validate(values: dict[str, Any]) -> None:
                 detail="recognition_threshold must be a number between 0 and 1",
             )
         values["recognition_threshold"] = float(v)
+    if "unknown_retention_days" in values:
+        v = values["unknown_retention_days"]
+        if not isinstance(v, int) or isinstance(v, bool) or v < 0 or v > 3650:
+            raise HTTPException(
+                status_code=422,
+                detail="unknown_retention_days must be an integer between 0 and 3650",
+            )
     if "smtp_port" in values:
         try:
             values["smtp_port"] = int(values["smtp_port"])

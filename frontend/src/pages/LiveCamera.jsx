@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { api, getToken } from '../api/client';
+import { api } from '../api/client';
 import Badge from '../components/Badge';
 import Spinner from '../components/Spinner';
 import Icon from '../components/Icons';
@@ -49,6 +49,10 @@ export default function LiveCamera() {
   const [analyzeError, setAnalyzeError] = useState('');
   const fileRef = useRef(null);
 
+  // Short-lived single-purpose token for the MJPEG URL (never the API token:
+  // URLs land in server logs). Refetched on every stream (re)start.
+  const [streamToken, setStreamToken] = useState(null);
+
   const loadStatus = () => {
     setStatusError('');
     api
@@ -61,6 +65,14 @@ export default function LiveCamera() {
   };
 
   useEffect(loadStatus, []);
+
+  useEffect(() => {
+    // New token per stream start (streamKey changes on Reconnect / AI toggle)
+    api
+      .post('/api/camera/stream-token')
+      .then((d) => setStreamToken(d.stream_token))
+      .catch(() => setStreamToken(null));
+  }, [streamKey]);
 
   useEffect(() => {
     return () => {
@@ -94,9 +106,11 @@ export default function LiveCamera() {
   };
 
   const faces = result?.faces || [];
-  const streamUrl = `/api/camera/stream?token=${encodeURIComponent(getToken() || '')}${
-    aiOverlay ? '&analyze=1' : ''
-  }&k=${streamKey}`;
+  const streamUrl = streamToken
+    ? `/api/camera/stream?token=${encodeURIComponent(streamToken)}${
+        aiOverlay ? '&analyze=1' : ''
+      }&k=${streamKey}`
+    : null;
 
   return (
     <div className="page">
@@ -139,7 +153,7 @@ export default function LiveCamera() {
         </div>
         {statusError && <div className="error-text">{statusError}</div>}
         <div className="stream-frame">
-          {status === null ? (
+          {status === null || (status.available && !streamFailed && !streamUrl) ? (
             <Spinner />
           ) : status.available && !streamFailed ? (
             <img

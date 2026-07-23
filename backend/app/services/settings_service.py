@@ -11,6 +11,9 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "liveness_enabled": False,
     "camera_source": "0",
     "notify_on_unknown": True,
+    # Biometric retention: days to keep unknown-face records (snapshot +
+    # embedding). 0 disables automatic purging. See docs/DATA_RETENTION.md.
+    "unknown_retention_days": 0,
     # Email (SMTP)
     "email_enabled": False,
     "smtp_host": "",

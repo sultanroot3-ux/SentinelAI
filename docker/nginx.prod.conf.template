@@ -2,9 +2,17 @@
 # (envsubst on ${DOMAIN}). Serves the dashboard over HTTPS with Let's Encrypt
 # certificates and proxies /api to the backend container.
 
+# Log-safe access format: logs the request PATH ($uri) without the query
+# string, so stream tokens (?token=...) never land in access logs even though
+# they are already short-lived and single-purpose (defense in depth, H2).
+log_format sentinel_safe '$remote_addr - $remote_user [$time_local] '
+                         '"$request_method $uri $server_protocol" '
+                         '$status $body_bytes_sent "$http_referer" "$http_user_agent"';
+
 server {
     listen 80;
     server_name ${DOMAIN};
+    access_log /var/log/nginx/access.log sentinel_safe;
 
     # ACME challenge for certbot renewals
     location /.well-known/acme-challenge/ {
@@ -25,6 +33,7 @@ server {
     listen 443 ssl;
     http2 on;
     server_name ${DOMAIN};
+    access_log /var/log/nginx/access.log sentinel_safe;
 
     ssl_certificate     /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;

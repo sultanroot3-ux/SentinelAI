@@ -3,6 +3,19 @@
 All notable changes to SentinelAI are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: [SemVer](https://semver.org/).
 
+## [1.0.3] — 2026-07-24
+
+HIGH-priority enterprise-readiness requirements (H1–H4). No new product features.
+
+### Added
+- **Biometric retention (H1)**: `unknown_retention_days` setting + background purge of expired unknown-person records (snapshot + embedding + row), protecting case-linked and watchlisted records, audited on every purge; `docs/DATA_RETENTION.md`
+- **Stream tokens (H2)**: `POST /api/camera/stream-token` issues 60-second single-purpose tokens for the MJPEG URL; access tokens rejected on the stream, stream tokens rejected on the API; nginx logs strip query strings
+- **Media backups (H3)**: daily backup service now also archives the media volume (enrollment photos + evidence snapshots); `docs/BACKUP_RESTORE.md`
+- **Offsite backups (H4)**: opt-in `offsite` compose profile replicates backups to any rclone target with post-transfer verification
+
+### Security
+- Live-stream authentication no longer exposes a reusable 30-minute credential in web-server logs (H2)
+
 ## [1.0.2] — 2026-07-23
 
 Production-blocker fixes from the final engineering review. No new features.
