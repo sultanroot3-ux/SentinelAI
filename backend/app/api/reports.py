@@ -8,7 +8,7 @@ from fastapi.responses import Response, StreamingResponse
 from sqlalchemy.orm import Session, joinedload
 
 from app.api.utils import serialize_log
-from app.core.security import get_current_user
+from app.core.security import require_roles
 from app.db.database import get_db
 from app.models.models import RecognitionLog, User
 
@@ -110,7 +110,7 @@ def visitors_report(
     period: str = Query("daily", pattern="^(daily|weekly|monthly)$"),
     format: str = Query("csv", pattern="^(csv|json|pdf|xlsx)$"),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_roles("admin", "security_officer")),
 ):
     start = _period_start(period)
     logs = (

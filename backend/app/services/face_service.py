@@ -11,6 +11,7 @@ frame -> detect faces -> liveness -> embed -> cosine match vs registered users
       -> unknown: snapshot + UnknownFace row + alert notification (rate-limited)
 """
 import logging
+import threading
 import time
 import uuid
 from collections import deque
@@ -58,6 +59,10 @@ except ImportError:
     )
 
 _HAAR_CASCADE = None
+# Sync endpoints run on a threadpool, so lazy singletons and the embedding
+# cache are touched concurrently. These locks make init + cache rebuild atomic.
+_MODEL_LOCK = threading.Lock()
+_CACHE_LOCK = threading.Lock()
 
 
 def cv2_available() -> bool:
@@ -72,9 +77,11 @@ def _get_insightface_app():
     """Lazily initialise the buffalo_l FaceAnalysis model (downloads ~300 MB once)."""
     global _INSIGHTFACE_APP
     if _INSIGHTFACE_APP is None:
-        app = FaceAnalysis(name="buffalo_l")
-        app.prepare(ctx_id=-1, det_size=(640, 640))  # CPU
-        _INSIGHTFACE_APP = app
+        with _MODEL_LOCK:
+            if _INSIGHTFACE_APP is None:  # double-checked: only one thread builds
+                app = FaceAnalysis(name="buffalo_l")
+                app.prepare(ctx_id=-1, det_size=(640, 640))  # CPU
+                _INSIGHTFACE_APP = app
     return _INSIGHTFACE_APP
 
 
@@ -277,23 +284,30 @@ def _get_embedding_matrix(db: Session):
     """Return (user_ids array, unit-normalized embedding matrix) or (None, None)."""
     sig = _embedding_version_signature(db)
     if not _EMBED_CACHE["valid"] or _EMBED_CACHE["sig"] != sig:
-        users = (
-            db.query(User.id, User.face_embedding)
-            .filter(User.face_registered.is_(True), User.face_embedding.isnot(None))
-            .all()
-        )
-        ids, rows = [], []
-        for uid, blob in users:
-            vec = np.frombuffer(blob, dtype=np.float32)
-            norm = float(np.linalg.norm(vec))
-            if vec.size == 0 or norm == 0:
-                continue
-            ids.append(uid)
-            rows.append(vec / norm)
-        _EMBED_CACHE["ids"] = np.asarray(ids) if ids else None
-        _EMBED_CACHE["matrix"] = np.stack(rows) if rows else None
-        _EMBED_CACHE["sig"] = sig
-        _EMBED_CACHE["valid"] = True
+        # Lock the rebuild so concurrent threadpool requests can't observe a
+        # half-updated cache (ids set before matrix, or vice versa).
+        with _CACHE_LOCK:
+            if not _EMBED_CACHE["valid"] or _EMBED_CACHE["sig"] != sig:
+                users = (
+                    db.query(User.id, User.face_embedding)
+                    .filter(
+                        User.face_registered.is_(True),
+                        User.face_embedding.isnot(None),
+                    )
+                    .all()
+                )
+                ids, rows = [], []
+                for uid, blob in users:
+                    vec = np.frombuffer(blob, dtype=np.float32)
+                    norm = float(np.linalg.norm(vec))
+                    if vec.size == 0 or norm == 0:
+                        continue
+                    ids.append(uid)
+                    rows.append(vec / norm)
+                _EMBED_CACHE["ids"] = np.asarray(ids) if ids else None
+                _EMBED_CACHE["matrix"] = np.stack(rows) if rows else None
+                _EMBED_CACHE["sig"] = sig
+                _EMBED_CACHE["valid"] = True
     return _EMBED_CACHE["ids"], _EMBED_CACHE["matrix"]
 
 

@@ -8,6 +8,7 @@ from app.api.utils import serialize_unknown
 from app.core.config import settings
 from app.core.security import get_current_user, require_roles
 from app.db.database import get_db
+from app.services.audit_service import write_audit
 from app.models.models import UnknownFace, User
 from app.schemas.schemas import PaginatedUnknown, UnknownFaceOut, UnknownFaceUpdate
 
@@ -46,7 +47,7 @@ def update_unknown(
     unknown_id: int,
     payload: UnknownFaceUpdate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("admin", "security_officer")),
+    officer: User = Depends(require_roles("admin", "security_officer")),
 ):
     unknown = db.get(UnknownFace, unknown_id)
     if unknown is None:
@@ -54,6 +55,11 @@ def update_unknown(
     unknown.status = payload.status
     db.commit()
     db.refresh(unknown)
+    write_audit(
+        db, "unknown_update",
+        f"Unknown {unknown.unknown_person_id or unknown_id} status -> {payload.status}",
+        user=officer,
+    )
     return serialize_unknown(unknown)
 
 
@@ -61,7 +67,7 @@ def update_unknown(
 def delete_unknown(
     unknown_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("admin", "security_officer")),
+    officer: User = Depends(require_roles("admin", "security_officer")),
 ):
     unknown = db.get(UnknownFace, unknown_id)
     if unknown is None:
@@ -76,6 +82,11 @@ def delete_unknown(
         except OSError:
             pass
 
+    label = unknown.unknown_person_id or f"id={unknown_id}"
     db.delete(unknown)
     db.commit()
+    # Deleting biometric evidence must be accountable (compliance).
+    write_audit(db, "unknown_delete",
+                f"Deleted unknown-face record {label} (snapshot + embedding removed)",
+                user=officer)
     return {"detail": "Unknown face deleted"}

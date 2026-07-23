@@ -42,19 +42,13 @@ export function AuthProvider({ children }) {
     setUser(null);
   }, []);
 
-  const refreshUser = useCallback(async () => {
-    const me = await api.get('/api/auth/me');
-    setUser(me);
-    return me;
-  }, []);
-
   const updateUser = useCallback((u) => setUser(u), []);
 
   const mustChangePassword = !!user?.must_change_password;
 
   return (
     <AuthContext.Provider
-      value={{ user, loading, login, logout, refreshUser, updateUser, mustChangePassword }}
+      value={{ user, loading, login, logout, updateUser, mustChangePassword }}
     >
       {children}
     </AuthContext.Provider>

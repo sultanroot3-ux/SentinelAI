@@ -4,7 +4,7 @@ from typing import Any
 from fastapi import APIRouter, Body, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.core.security import get_current_user, require_roles
+from app.core.security import require_roles
 from app.db.database import get_db
 from app.models.models import User
 from app.services.audit_service import write_audit
@@ -81,7 +81,7 @@ def _mask_secrets(settings_map: dict[str, Any]) -> dict[str, Any]:
 @router.get("")
 def get_settings_map(
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_roles("admin", "it")),
 ) -> dict[str, Any]:
     return _mask_secrets(get_all_settings(db))
 

@@ -10,6 +10,7 @@ labelled estimates (see investigation_service docstring).
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy.orm import Session
 
+from app.api.utils import read_upload_capped
 from app.core.media import sign_media_path
 from app.core.security import require_roles
 from app.db.database import get_db
@@ -47,9 +48,7 @@ def analyze(
         raise HTTPException(
             status_code=503, detail="Face analysis engine (insightface) unavailable."
         )
-    content = file.file.read()
-    if not content:
-        raise HTTPException(status_code=422, detail="Empty file")
+    content = read_upload_capped(file)
 
     report = investigation_service.investigate_frame(content, db, camera_name=camera)
     if report.get("error") == "invalid image":

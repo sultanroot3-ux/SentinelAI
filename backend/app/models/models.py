@@ -148,8 +148,11 @@ class RecognitionLog(Base):
     __tablename__ = "recognition_logs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    # Indexed: recognition_logs is the highest-volume table and is queried
+    # `WHERE user_id = ? ORDER BY timestamp DESC` by the logs page and every
+    # investigation report (recognition history + last-seen).
     user_id: Mapped[int | None] = mapped_column(
-        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
     )
     camera: Mapped[str] = mapped_column(String(80), default="webcam", nullable=False)
     camera_id: Mapped[int | None] = mapped_column(

@@ -27,6 +27,10 @@ from app.services.audit_service import write_audit
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
+# A real bcrypt hash verified against when the username is unknown, so login
+# takes the same time whether or not the account exists (anti-enumeration).
+_DUMMY_PASSWORD_HASH = hash_password("sentinelai-timing-equalizer")
+
 
 @router.post("/login", response_model=LoginResponse)
 def login(
@@ -49,7 +53,13 @@ def login(
         )
 
     user = db.query(User).filter(User.username == payload.username).first()
-    if user is None or not verify_password(payload.password, user.password_hash):
+    # Always run a bcrypt verification — even when the username is unknown —
+    # so response time does not reveal whether a username exists (defeats the
+    # timing side channel behind the generic error message below).
+    password_ok = verify_password(
+        payload.password, user.password_hash if user else _DUMMY_PASSWORD_HASH
+    )
+    if user is None or not password_ok:
         rate_limit.record_failure(payload.username, ip)
         write_audit(db, "login_failed", f"Failed login attempt for '{payload.username}'")
         raise HTTPException(status_code=401, detail="Invalid username or password")

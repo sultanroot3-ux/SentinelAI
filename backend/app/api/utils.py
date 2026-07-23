@@ -3,9 +3,40 @@
 Media URLs (photos, snapshots) are converted to short-lived signed URLs here
 so that no serialized response ever exposes a directly-fetchable static path.
 """
+from fastapi import HTTPException, UploadFile
+
 from app.core.media import sign_media_path
 from app.models.models import Case, RecognitionLog, UnknownFace, User
 from app.schemas.schemas import CaseOut, RecognitionLogOut, UnknownFaceOut, UserOut
+
+# Upload cap: face frames/photos are small; anything larger is rejected before
+# it is read into memory, so a client cannot exhaust RAM with a huge "image".
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
+
+
+def read_upload_capped(file: UploadFile, max_bytes: int = MAX_UPLOAD_BYTES) -> bytes:
+    """Read an UploadFile, rejecting oversized uploads (413) and empty ones (422).
+
+    Reads in chunks and stops as soon as the cap is exceeded, so an oversized
+    upload never fully materializes in memory.
+    """
+    chunks: list[bytes] = []
+    total = 0
+    while True:
+        chunk = file.file.read(1024 * 1024)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > max_bytes:
+            raise HTTPException(
+                status_code=413,
+                detail=f"File too large (limit {max_bytes // (1024 * 1024)} MB).",
+            )
+        chunks.append(chunk)
+    content = b"".join(chunks)
+    if not content:
+        raise HTTPException(status_code=422, detail="Empty file")
+    return content
 
 
 def serialize_user(user: User) -> UserOut:

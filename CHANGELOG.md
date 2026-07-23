@@ -3,6 +3,23 @@
 All notable changes to SentinelAI are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: [SemVer](https://semver.org/).
 
+## [1.0.4] — 2026-07-24
+
+Fixes from a final pre-freeze codebase audit (backend + frontend). No new features.
+
+### Security
+- Login no longer leaks whether a username exists via response timing (always runs a bcrypt verification)
+- Uploaded files are capped at 10 MB and rejected before being read into memory (prevents a trivial memory-exhaustion DoS by any authenticated user)
+- `GET /api/settings` restricted to admin/it, and `GET /api/reports/visitors` to admin/security_officer (previously any authenticated user could read channel config / export the full visitor & recognition logs); matching nav items are now role-gated
+- Deleting an unknown-face record (biometric evidence) and changing its status are now audited; permission denials (403) are logged
+
+### Fixed
+- Added a missing index on `recognition_logs.user_id` (the highest-volume table, queried by every investigation report and the logs page) — avoids full table scans as the table grows
+- Request schemas now enforce `max_length` matching the DB columns, so over-length input returns 422 instead of a 500 on PostgreSQL
+- Made the insightface model singleton and the embedding cache rebuild thread-safe (they are touched concurrently by the request threadpool)
+- Added `.dockerignore` — the backend image no longer bakes in the host's ~700 MB dev virtualenv, and the build context no longer includes database backups
+- Removed dead code (unused `refreshUser` auth-context method); the unread-notification badge no longer under-counts past 50
+
 ## [1.0.3] — 2026-07-24
 
 HIGH-priority enterprise-readiness requirements (H1–H4). No new product features.

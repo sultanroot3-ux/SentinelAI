@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy import or_
 from sqlalchemy.orm import Session, joinedload
 
-from app.api.utils import serialize_user
+from app.api.utils import read_upload_capped, serialize_user
 from app.core.config import settings
 from app.core.security import get_current_user, hash_password, require_roles
 from app.db.database import get_db
@@ -159,9 +159,7 @@ def upload_photo(
             detail=f"Unsupported image type '{ext}'. Allowed: {sorted(ALLOWED_IMAGE_EXTENSIONS)}",
         )
 
-    content = file.file.read()
-    if not content:
-        raise HTTPException(status_code=422, detail="Empty file")
+    content = read_upload_capped(file)
 
     filename = f"user_{user.id}_{uuid.uuid4().hex[:8]}{ext}"
     dest = settings.UPLOADS_DIR / filename

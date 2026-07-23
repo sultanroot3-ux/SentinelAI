@@ -1,3 +1,37 @@
+# SentinelAI v1.0.4 — Release Notes
+
+**Release date:** 2026-07-24
+
+v1.0.4 is a hardening release: fixes from a final, from-scratch audit of the
+whole codebase (backend + frontend) before freezing. No new features.
+
+## Security & correctness fixes
+
+- **Login timing side channel** closed — an unknown username now takes the same
+  time as a real one (always runs bcrypt), so the generic error can't be
+  bypassed to enumerate accounts.
+- **Upload DoS** closed — all image uploads are capped at 10 MB and rejected
+  before being read into memory.
+- **Two authorization gaps** closed — `GET /api/settings` (channel config) and
+  `GET /api/reports/visitors` (full log export) were readable by any
+  authenticated user; now restricted to admin/it and admin/security_officer
+  respectively, with matching nav gating.
+- **Audit coverage** completed — deleting biometric evidence (unknown-face
+  records) and permission denials are now logged.
+- **Missing DB index** on `recognition_logs.user_id` added (highest-volume
+  table; every investigation report queried it with a full scan).
+- **Input validation** — request schemas enforce `max_length` matching the DB,
+  turning would-be PostgreSQL 500s into clean 422s.
+- **Thread-safety** — the AI model singleton and embedding cache are now locked
+  against the request threadpool.
+- **Image/build hygiene** — added `.dockerignore`; the backend image dropped
+  the host's ~700 MB dev virtualenv it had been baking in.
+- **Dead code** removed; the unread-notification badge no longer under-counts.
+
+Verified: 141 backend tests, frontend build, full production Docker stack, CI.
+
+---
+
 # SentinelAI v1.0.3 — Release Notes
 
 **Release date:** 2026-07-24

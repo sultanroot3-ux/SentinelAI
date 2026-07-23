@@ -58,18 +58,18 @@ class ChangePasswordRequest(BaseModel):
 
 # ---------- Users ----------
 class UserCreate(BaseModel):
-    name: str
-    email: EmailStr
-    username: str
-    password: str = Field(min_length=8)
+    name: str = Field(max_length=120)
+    email: EmailStr = Field(max_length=255)
+    username: str = Field(max_length=80)
+    password: str = Field(min_length=8, max_length=128)
     role: Role = "receptionist"
     department_id: int | None = None
-    employee_id: str | None = None
-    access_level: str | None = None
-    job_title: str | None = None
-    office_building: str | None = None
-    badge_number: str | None = None
-    phone: str | None = None
+    employee_id: str | None = Field(default=None, max_length=50)
+    access_level: str | None = Field(default=None, max_length=30)
+    job_title: str | None = Field(default=None, max_length=120)
+    office_building: str | None = Field(default=None, max_length=120)
+    badge_number: str | None = Field(default=None, max_length=50)
+    phone: str | None = Field(default=None, max_length=40)
     status: Literal["active", "inactive"] | None = "active"
 
 
@@ -77,7 +77,7 @@ class UserUpdate(BaseModel):
     name: str | None = None
     email: EmailStr | None = None
     username: str | None = None
-    password: str | None = Field(default=None, min_length=8)
+    password: str | None = Field(default=None, min_length=8, max_length=128)
     role: Role | None = None
     department_id: int | None = None
     employee_id: str | None = None

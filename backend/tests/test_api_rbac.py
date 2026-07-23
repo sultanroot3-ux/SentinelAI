@@ -62,6 +62,16 @@ def test_all_read_endpoints_allow_any_authenticated(client, receptionist_headers
         "/api/cases",
         "/api/analytics/summary",
         "/api/notifications",
-        "/api/settings",
     ):
         assert client.get(ep, headers=receptionist_headers).status_code == 200, ep
+
+
+def test_sensitive_reads_are_role_restricted(client, receptionist_headers):
+    # Settings expose channel config; reports export the full visitor/recognition
+    # log. Both must be denied to a receptionist (settings.manage = admin/it;
+    # reports.view = admin/security_officer).
+    assert client.get("/api/settings", headers=receptionist_headers).status_code == 403
+    assert (
+        client.get("/api/reports/visitors", headers=receptionist_headers).status_code
+        == 403
+    )

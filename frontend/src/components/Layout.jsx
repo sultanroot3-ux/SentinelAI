@@ -23,10 +23,10 @@ const NAV = [
   { to: '/departments', label: 'Departments', icon: 'departments' },
   { to: '/rbac', label: 'Roles & Permissions', icon: 'shield', roles: ['admin', 'security_officer', 'it'] },
   { to: '/audit', label: 'Audit Log', icon: 'cases', roles: ['admin', 'security_officer'] },
-  { to: '/reports', label: 'Reports', icon: 'reports' },
+  { to: '/reports', label: 'Reports', icon: 'reports', roles: ['admin', 'security_officer'] },
   { to: '/analytics', label: 'Analytics', icon: 'analytics' },
   { to: '/notifications', label: 'Notifications', icon: 'bell' },
-  { to: '/settings', label: 'Settings', icon: 'settings' },
+  { to: '/settings', label: 'Settings', icon: 'settings', roles: ['admin', 'it'] },
   { to: '/profile', label: 'Profile', icon: 'profile' },
 ];
 
@@ -50,7 +50,9 @@ export default function Layout() {
     let alive = true;
     const load = () =>
       api
-        .get('/api/notifications', { unread_only: true })
+        // limit=200 (the API max) so the badge count is accurate up to 200
+        // rather than silently capping at the default page size of 50.
+        .get('/api/notifications', { unread_only: true, limit: 200 })
         .then((data) => alive && setUnread(asPage(data).items.length))
         .catch(() => {});
     load();

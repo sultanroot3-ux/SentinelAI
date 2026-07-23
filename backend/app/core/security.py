@@ -6,6 +6,7 @@ Token model:
   rotates the token; the jti of every issued refresh token is stored in the
   refresh_tokens table so it can be revoked (logout, password change).
 """
+import logging
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -18,6 +19,8 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.db.database import get_db
 from app.models.models import RefreshToken, User
+
+logger = logging.getLogger("sentinelai.security")
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -166,6 +169,12 @@ def require_roles(*roles: str):
 
     def checker(current_user: User = Depends(get_current_user)) -> User:
         if current_user.role not in roles:
+            # Log authorization failures so probing (a low-privilege account
+            # hitting admin endpoints, or a stolen token) leaves a trail.
+            logger.warning(
+                "Permission denied: user '%s' (role=%s) requires one of %s",
+                current_user.username, current_user.role, roles,
+            )
             raise HTTPException(
                 status_code=403,
                 detail=f"Requires one of roles: {', '.join(roles)}",

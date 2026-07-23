@@ -178,3 +178,63 @@ class TestStreamTokens:
         time.sleep(2)
         resp = client.get(f"/api/camera/stream?token={token}")
         assert resp.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# Final-audit fixes (v1.0.4)
+# ---------------------------------------------------------------------------
+class TestAuditReviewFixes:
+    def test_oversized_upload_rejected(self, client, admin_headers):
+        # 11 MB payload exceeds the 10 MB cap -> 413, not an OOM/500
+        big = b"\xff" * (11 * 1024 * 1024)
+        resp = client.post(
+            "/api/recognition/frame",
+            headers=admin_headers,
+            files={"file": ("big.jpg", big, "image/jpeg")},
+        )
+        assert resp.status_code == 413
+
+    def test_login_runs_verify_for_unknown_user(self, client):
+        # Unknown username still returns the generic 401 (timing-equalized path)
+        resp = client.post(
+            "/api/auth/login",
+            json={"username": "no-such-user-xyz", "password": "whatever12"},
+        )
+        assert resp.status_code == 401
+        assert resp.json()["detail"] == "Invalid username or password"
+
+    def test_unknown_delete_is_audited(self, client, admin_headers):
+        from app.db.database import SessionLocal
+        from app.models.models import AuditLog, UnknownFace
+
+        db = SessionLocal()
+        try:
+            uf = UnknownFace(unknown_person_id="UNK-AUDIT-DEL", camera="webcam", status="new")
+            db.add(uf)
+            db.commit()
+            uf_id = uf.id
+        finally:
+            db.close()
+        resp = client.delete(f"/api/unknown/{uf_id}", headers=admin_headers)
+        assert resp.status_code == 200
+        db = SessionLocal()
+        try:
+            assert db.query(AuditLog).filter(
+                AuditLog.action == "unknown_delete"
+            ).count() >= 1
+        finally:
+            db.close()
+
+    def test_over_length_field_rejected_as_422(self, client, admin_headers):
+        # Schema max_length turns a would-be Postgres DataError (500) into 422
+        resp = client.post(
+            "/api/users",
+            headers=admin_headers,
+            json={
+                "name": "x" * 300,
+                "email": "toolong@example.com",
+                "username": "toolonguser",
+                "password": "valid-pass-123",
+            },
+        )
+        assert resp.status_code == 422

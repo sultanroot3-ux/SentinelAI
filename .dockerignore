@@ -1,0 +1,25 @@
+# Keep the Docker build context small and prevent host artifacts (and secrets)
+# from being copied into images. Without this, `COPY backend/ .` pulls the
+# host's ~700 MB macOS .venv into the Linux image, and the build context
+# includes database backups.
+**/.venv
+**/venv
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+frontend/node_modules
+frontend/dist
+.git
+.github
+backups
+uploads
+unknown_faces
+logs
+database/*.db
+docker/models/*.zip
+*.log
+.env
+.DS_Store
+scratchpad
