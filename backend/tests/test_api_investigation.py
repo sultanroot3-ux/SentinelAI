@@ -216,12 +216,16 @@ class TestInvestigation:
         assert resp.status_code == 403
 
     def test_analyze_rejects_empty_file(self, client, admin_headers):
+        import app.services.face_service as fs
+
         resp = client.post(
             "/api/investigation/analyze",
             headers=admin_headers,
             files={"file": ("empty.jpg", b"", "image/jpeg")},
         )
-        assert resp.status_code == 422
+        # Without insightface (e.g. CI) the engine-availability 503 fires
+        # before file validation; with it, the empty file is rejected as 422.
+        assert resp.status_code == (422 if fs.insightface_available() else 503)
 
     def test_analyze_rejects_invalid_image(self, client, admin_headers):
         import app.services.face_service as fs
