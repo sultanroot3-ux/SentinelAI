@@ -6,7 +6,6 @@ pydantic
 pydantic-settings
 email-validator
 python-jose[cryptography]
-passlib[bcrypt]
 bcrypt==5.0.0
 python-multipart
 # OpenCV 5.x removed the legacy CascadeClassifier API the Haar fallback uses
