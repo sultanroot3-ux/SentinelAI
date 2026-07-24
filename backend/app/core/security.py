@@ -10,10 +10,10 @@ import logging
 import uuid
 from datetime import datetime, timedelta, timezone
 
+import bcrypt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -22,20 +22,27 @@ from app.models.models import RefreshToken, User
 
 logger = logging.getLogger("sentinelai.security")
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
 # auto_error=False so we can return a clean 401 {detail} ourselves
 bearer_scheme = HTTPBearer(auto_error=False)
 
+# bcrypt operates on the raw password bytes and ignores everything past the
+# first 72; longer inputs raise in bcrypt 5, so we truncate to preserve the
+# historical passlib behaviour and stay compatible with existing $2b$ hashes.
+_BCRYPT_MAX_BYTES = 72
+
+
+def _to_bcrypt_bytes(password: str) -> bytes:
+    return password.encode("utf-8")[:_BCRYPT_MAX_BYTES]
+
 
 def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
+    return bcrypt.hashpw(_to_bcrypt_bytes(password), bcrypt.gensalt()).decode("utf-8")
 
 
 def verify_password(plain: str, hashed: str) -> bool:
     try:
-        return pwd_context.verify(plain, hashed)
-    except ValueError:
+        return bcrypt.checkpw(_to_bcrypt_bytes(plain), hashed.encode("utf-8"))
+    except (ValueError, TypeError):
         return False
 
 
