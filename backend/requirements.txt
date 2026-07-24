@@ -10,7 +10,7 @@ passlib[bcrypt]
 bcrypt==4.0.1
 python-multipart
 # OpenCV 5.x removed the legacy CascadeClassifier API the Haar fallback uses
-opencv-python>=4.8,<5
+opencv-python>=4.13.0.92,<5
 numpy
 # PostgreSQL driver (SQLite needs nothing extra)
 psycopg2-binary
