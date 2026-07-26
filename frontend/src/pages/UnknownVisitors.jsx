@@ -199,8 +199,8 @@ export default function UnknownVisitors() {
               <img className="modal-snapshot" src={caseTarget.snapshot_url} alt="" />
             )}
             <div className="form-field">
-              <label>Priority</label>
-              <select
+              <label htmlFor="unknownvisitors-priority">Priority</label>
+              <select id="unknownvisitors-priority"
                 value={caseForm.priority}
                 onChange={(e) => setCaseForm((f) => ({ ...f, priority: e.target.value }))}
               >
@@ -211,8 +211,8 @@ export default function UnknownVisitors() {
               </select>
             </div>
             <div className="form-field">
-              <label>Assign to</label>
-              <select
+              <label htmlFor="unknownvisitors-assign-to">Assign to</label>
+              <select id="unknownvisitors-assign-to"
                 value={caseForm.assigned_to}
                 onChange={(e) => setCaseForm((f) => ({ ...f, assigned_to: e.target.value }))}
               >
@@ -225,8 +225,8 @@ export default function UnknownVisitors() {
               </select>
             </div>
             <div className="form-field">
-              <label>Notes</label>
-              <textarea
+              <label htmlFor="unknownvisitors-notes">Notes</label>
+              <textarea id="unknownvisitors-notes"
                 rows={3}
                 value={caseForm.notes}
                 onChange={(e) => setCaseForm((f) => ({ ...f, notes: e.target.value }))}

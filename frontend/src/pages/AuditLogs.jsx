@@ -47,8 +47,8 @@ export default function AuditLogs() {
         <div className="filter-row space-between">
           <div className="filter-row">
             <div className="form-field inline">
-              <label>Search</label>
-              <input
+              <label htmlFor="auditlogs-search">Search</label>
+              <input id="auditlogs-search"
                 type="search"
                 placeholder="Detail or username…"
                 value={search}
@@ -56,8 +56,8 @@ export default function AuditLogs() {
               />
             </div>
             <div className="form-field inline">
-              <label>Action</label>
-              <select value={actionFilter} onChange={(e) => setActionFilter(e.target.value)}>
+              <label htmlFor="auditlogs-action">Action</label>
+              <select id="auditlogs-action" value={actionFilter} onChange={(e) => setActionFilter(e.target.value)}>
                 <option value="">All</option>
                 {actions.map((a) => (
                   <option key={a} value={a}>

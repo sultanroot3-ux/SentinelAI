@@ -41,16 +41,16 @@ export default function VisitorLogs() {
       <div className="card pad">
         <div className="filter-row">
           <div className="form-field inline">
-            <label>From</label>
-            <input
+            <label htmlFor="visitorlogs-from">From</label>
+            <input id="visitorlogs-from"
               type="date"
               value={filters.date_from}
               onChange={(e) => setFilter('date_from', e.target.value)}
             />
           </div>
           <div className="form-field inline">
-            <label>To</label>
-            <input
+            <label htmlFor="visitorlogs-to">To</label>
+            <input id="visitorlogs-to"
               type="date"
               value={filters.date_to}
               onChange={(e) => setFilter('date_to', e.target.value)}

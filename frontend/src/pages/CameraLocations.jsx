@@ -92,8 +92,8 @@ export default function CameraLocations() {
         <div className="filter-row space-between">
           <div className="filter-row">
             <div className="form-field inline">
-              <label>Search</label>
-              <input
+              <label htmlFor="cameralocations-search">Search</label>
+              <input id="cameralocations-search"
                 type="search"
                 placeholder="Name, building, room…"
                 value={search}
@@ -167,38 +167,38 @@ export default function CameraLocations() {
       >
         <div className="form-grid two-col">
           <div className="form-field">
-            <label>Name</label>
-            <input
+            <label htmlFor="cameralocations-name">Name</label>
+            <input id="cameralocations-name"
               value={form.name}
               placeholder="e.g. East Entrance"
               onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
             />
           </div>
           <div className="form-field">
-            <label>Building</label>
-            <input
+            <label htmlFor="cameralocations-building">Building</label>
+            <input id="cameralocations-building"
               value={form.building}
               onChange={(e) => setForm((f) => ({ ...f, building: e.target.value }))}
             />
           </div>
           <div className="form-field">
-            <label>Floor</label>
-            <input
+            <label htmlFor="cameralocations-floor">Floor</label>
+            <input id="cameralocations-floor"
               value={form.floor}
               onChange={(e) => setForm((f) => ({ ...f, floor: e.target.value }))}
             />
           </div>
           <div className="form-field">
-            <label>Room</label>
-            <input
+            <label htmlFor="cameralocations-room">Room</label>
+            <input id="cameralocations-room"
               value={form.room}
               onChange={(e) => setForm((f) => ({ ...f, room: e.target.value }))}
             />
           </div>
         </div>
         <div className="form-field">
-          <label>Description</label>
-          <input
+          <label htmlFor="cameralocations-description">Description</label>
+          <input id="cameralocations-description"
             value={form.description}
             onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
           />

@@ -1659,3 +1659,46 @@ textarea {
 }
 .watchlist-entry svg { vertical-align: -2px; }
 .checkbox-label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+
+/* ============ Accessibility ============ */
+
+/* Respect the OS "reduce motion" setting. Vestibular disorders and motion
+   sensitivity make spinners, slides and transitions actively painful; this is
+   a WCAG 2.3.3 requirement, not a preference. Animations are reduced to a
+   near-instant state change rather than removed, so anything that depends on
+   an animation/transition end event still fires. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* A visible focus ring on keyboard navigation. :focus-visible keeps it off
+   mouse clicks, so there is no reason to suppress it. */
+:focus-visible {
+  outline: 2px solid var(--accent, #0ba5c9);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+/* Skip link: lets keyboard and screen-reader users jump past the sidebar
+   navigation, which otherwise sits before the main content on every page. */
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 100;
+  padding: 10px 16px;
+  background: var(--accent, #0ba5c9);
+  color: #fff;
+  border-radius: 0 0 6px 0;
+  font-weight: 600;
+}
+.skip-link:focus {
+  left: 0;
+}

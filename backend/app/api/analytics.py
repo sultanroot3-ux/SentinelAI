@@ -50,11 +50,19 @@ def summary(
         or 0
     )
 
-    # Accuracy proxy: recognized detections / all detections (recognized + unknown)
+    # Match rate: the share of detections that matched an enrolled person.
+    #
+    # This is NOT model accuracy and must not be labelled as such. It has no
+    # ground truth — a correct non-match of a genuine stranger lowers it just as
+    # a false reject does, so a lobby full of visitors drags it down while the
+    # model performs perfectly. Reported as `match_rate` so operators are not
+    # led to read it as a correctness figure. Recognition accuracy (FAR/FRR) is
+    # measured by the AI pipeline test suite, not derived from production
+    # traffic — see backend/tests/test_ai_pipeline.py and docs/PERFORMANCE.md.
     total_recognized = db.query(func.count(RecognitionLog.id)).scalar() or 0
     total_unknown = db.query(func.count(UnknownFace.id)).scalar() or 0
     denominator = total_recognized + total_unknown
-    recognition_accuracy = (
+    match_rate = (
         round(total_recognized / denominator * 100, 2) if denominator else 0.0
     )
 
@@ -63,7 +71,7 @@ def summary(
         today_visitors=today_visitors,
         today_unknown=today_unknown,
         open_cases=open_cases,
-        recognition_accuracy=recognition_accuracy,
+        match_rate=match_rate,
     )
 
 

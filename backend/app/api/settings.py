@@ -8,6 +8,7 @@ from app.core.security import require_roles
 from app.db.database import get_db
 from app.models.models import User
 from app.services.audit_service import write_audit
+from app.services.notification_service import is_valid_discord_webhook
 from app.services.settings_service import (
     DEFAULT_SETTINGS,
     SECRET_KEYS,
@@ -68,6 +69,18 @@ def _validate(values: dict[str, Any]) -> None:
     for key in _STR_KEYS:
         if key in values:
             values[key] = str(values[key])
+    # The webhook URL is fetched by the server, so an arbitrary host would be an
+    # SSRF primitive. Rejected at configuration time as well as at send time so
+    # a mistyped URL surfaces immediately instead of silently never delivering.
+    url = values.get("discord_webhook_url")
+    if url and not is_valid_discord_webhook(url):
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "discord_webhook_url must be an https Discord webhook URL, e.g. "
+                "https://discord.com/api/webhooks/<id>/<token>"
+            ),
+        )
 
 
 def _mask_secrets(settings_map: dict[str, Any]) -> dict[str, Any]:

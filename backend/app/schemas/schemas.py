@@ -225,7 +225,10 @@ class AnalyticsSummary(BaseModel):
     today_visitors: int
     today_unknown: int
     open_cases: int
-    recognition_accuracy: float
+    # Share of detections that matched an enrolled person. Deliberately NOT
+    # named "accuracy": it has no ground truth and a genuine stranger lowers it
+    # exactly like a false reject would. See app/api/analytics.py.
+    match_rate: float
 
 
 class DailyPoint(BaseModel):

@@ -1,8 +1,16 @@
 # SentinelAI backend — production image.
-# Multi-stage: wheels are built once, the runtime stage stays slim and runs
-# as a non-root user. Includes the full AI engine (insightface + onnxruntime)
-# and the buffalo_l model baked in with checksum verification (C4) — the
-# container never downloads models at runtime and works fully offline.
+#
+# Multi-stage: dependencies are installed into a virtualenv in the build stage
+# (which has the compilers insightface needs), and only the finished venv is
+# copied into the slim runtime stage, which runs as a non-root user.
+#
+# Every dependency is installed with --require-hashes from the generated lock
+# files (B2), so a build either reproduces the audited dependency set exactly
+# or fails. Regenerate the locks with ./scripts/lock-requirements.sh.
+#
+# The AI engine (insightface + onnxruntime) and the buffalo_l model pack are
+# baked in with checksum verification, so the container never downloads a model
+# at runtime and works fully offline.
 
 # ---------- build stage ----------
 FROM python:3.11-slim AS build
@@ -11,10 +19,20 @@ FROM python:3.11-slim AS build
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential unzip curl && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /wheels
-COPY backend/requirements.txt .
-RUN pip wheel --no-cache-dir --wheel-dir /wheels -r requirements.txt \
-    && pip wheel --no-cache-dir --wheel-dir /wheels insightface onnxruntime
+# A venv keeps the installed tree in one relocatable directory. Installing
+# directly with --require-hashes (rather than building wheels and reinstalling
+# them) is what makes the hash check meaningful: locally-built wheels have
+# different digests than the audited PyPI artifacts, so a wheel round-trip
+# would silently defeat the verification.
+ENV VIRTUAL_ENV=/opt/venv
+RUN python -m venv "$VIRTUAL_ENV"
+ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+
+WORKDIR /deps
+COPY backend/requirements.txt backend/requirements-ai.txt ./
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir --require-hashes -r requirements.txt \
+    && pip install --no-cache-dir --require-hashes -r requirements-ai.txt
 
 # buffalo_l model pack, pinned by sha256 (official insightface v0.7 release).
 # A vendored copy in docker/models/ (gitignored) is used when present —
@@ -41,11 +59,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-COPY --from=build /wheels /wheels
-COPY backend/requirements.txt .
-RUN pip install --no-cache-dir --no-index --find-links=/wheels \
-      -r requirements.txt insightface onnxruntime \
-    && rm -rf /wheels
+# The finished venv only — no compilers or build caches in the final image.
+COPY --from=build /opt/venv /opt/venv
+ENV VIRTUAL_ENV=/opt/venv \
+    PATH="/opt/venv/bin:$PATH"
 
 COPY backend/ .
 COPY docker/entrypoint.sh /entrypoint.sh
@@ -72,6 +89,9 @@ USER sentinel
 
 EXPOSE 8000
 # WORKERS: MJPEG streams occupy a worker thread each; scale with camera count.
+# NOTE: >1 worker requires SENTINEL_REDIS_URL — the app refuses to start in
+# production without it, because rate limits and pipeline cooldowns would
+# otherwise be per-worker (B4). docker-compose.yml provides a redis service.
 ENV UVICORN_WORKERS=2
 # Entrypoint applies alembic migrations and refuses to start on failure (C1).
 ENTRYPOINT ["/entrypoint.sh"]

@@ -90,8 +90,8 @@ export default function Cases() {
       <div className="card pad">
         <div className="filter-row">
           <div className="form-field inline">
-            <label>Status</label>
-            <select
+            <label htmlFor="cases-status">Status</label>
+            <select id="cases-status"
               value={filters.status}
               onChange={(e) => {
                 setPage(1);
@@ -105,8 +105,8 @@ export default function Cases() {
             </select>
           </div>
           <div className="form-field inline">
-            <label>Priority</label>
-            <select
+            <label htmlFor="cases-priority">Priority</label>
+            <select id="cases-priority"
               value={filters.priority}
               onChange={(e) => {
                 setPage(1);
@@ -184,8 +184,8 @@ export default function Cases() {
             </div>
             <div className="form-grid two-col">
               <div className="form-field">
-                <label>Status</label>
-                <select
+                <label htmlFor="cases-status-2">Status</label>
+                <select id="cases-status-2"
                   value={form.status}
                   onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}
                 >
@@ -195,8 +195,8 @@ export default function Cases() {
                 </select>
               </div>
               <div className="form-field">
-                <label>Priority</label>
-                <select
+                <label htmlFor="cases-priority-2">Priority</label>
+                <select id="cases-priority-2"
                   value={form.priority}
                   onChange={(e) => setForm((f) => ({ ...f, priority: e.target.value }))}
                 >
@@ -207,8 +207,8 @@ export default function Cases() {
                 </select>
               </div>
               <div className="form-field">
-                <label>Assigned to</label>
-                <select
+                <label htmlFor="cases-assigned-to">Assigned to</label>
+                <select id="cases-assigned-to"
                   value={form.assigned_to}
                   onChange={(e) => setForm((f) => ({ ...f, assigned_to: e.target.value }))}
                 >
@@ -222,16 +222,16 @@ export default function Cases() {
               </div>
             </div>
             <div className="form-field">
-              <label>Notes</label>
-              <textarea
+              <label htmlFor="cases-notes">Notes</label>
+              <textarea id="cases-notes"
                 rows={3}
                 value={form.notes}
                 onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
               />
             </div>
             <div className="form-field">
-              <label>Resolution</label>
-              <textarea
+              <label htmlFor="cases-resolution">Resolution</label>
+              <textarea id="cases-resolution"
                 rows={2}
                 value={form.resolution}
                 onChange={(e) => setForm((f) => ({ ...f, resolution: e.target.value }))}

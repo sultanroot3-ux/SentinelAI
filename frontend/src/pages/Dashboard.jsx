@@ -64,10 +64,14 @@ export default function Dashboard() {
           tone="warn"
         />
         <StatCard icon="cases" label="Open Cases" value={summary.open_cases ?? 0} tone="danger" />
+        {/* Share of detections that matched an enrolled person — not model
+            accuracy. A lobby full of genuine visitors lowers it while the
+            model is performing perfectly, so it is labelled accordingly. */}
         <StatCard
           icon="analytics"
-          label="Recognition Accuracy"
-          value={fmtPercent(summary.recognition_accuracy)}
+          label="Match Rate"
+          title="Share of detections that matched an enrolled person. Not a measure of model accuracy."
+          value={fmtPercent(summary.match_rate)}
           tone="info"
         />
       </div>

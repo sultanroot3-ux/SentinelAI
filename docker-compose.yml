@@ -20,6 +20,26 @@ services:
       timeout: 3s
       retries: 10
 
+  # Shared state for login rate limiting and face-pipeline cooldowns (B4).
+  # Required whenever the backend runs more than one uvicorn worker — without
+  # it each worker keeps its own counters, so the login limit is multiplied by
+  # the worker count. The backend refuses to start in production if
+  # UVICORN_WORKERS > 1 and SENTINEL_REDIS_URL is unset.
+  redis:
+    image: redis:7-alpine
+    # Rate-limit state is reconstructible, so persistence is off; maxmemory
+    # with LRU keeps a flood of distinct keys from growing without bound.
+    command: >-
+      redis-server --save "" --appendonly no
+      --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   backend:
     build:
       context: .
@@ -35,8 +55,11 @@ services:
       - SENTINEL_ENV=production
       - SENTINEL_SECRET_KEY=${SENTINEL_SECRET_KEY:?set SENTINEL_SECRET_KEY in .env (openssl rand -hex 32)}
       - SENTINEL_DATABASE_URL=postgresql+psycopg2://sentinel:${SENTINEL_DB_PASSWORD}@db:5432/sentinelai
+      - SENTINEL_REDIS_URL=${SENTINEL_REDIS_URL:-redis://redis:6379/0}
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health', timeout=3)"]
@@ -60,3 +83,4 @@ services:
 volumes:
   pg-data:
   sentinel-data:
+  redis-data:

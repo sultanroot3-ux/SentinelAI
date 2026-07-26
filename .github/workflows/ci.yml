@@ -6,16 +6,27 @@ on:
   pull_request:
     branches: [main]
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.11"
+  NODE_VERSION: "20"
+
 jobs:
+  # ---------------------------------------------------------------------------
+  # Fast feedback: API/unit suite on SQLite.
+  # ---------------------------------------------------------------------------
   backend-tests:
-    name: Backend (pytest)
+    name: Backend (pytest, SQLite)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
 
       - uses: actions/setup-python@v7
         with:
-          python-version: "3.11"
+          python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
           cache-dependency-path: backend/requirements-dev.txt
 
@@ -24,14 +35,26 @@ jobs:
 
       - name: Install dependencies
         working-directory: backend
-        run: pip install -r requirements-dev.txt
+        run: |
+          pip install --require-hashes -r requirements.txt
+          pip install --require-hashes -r requirements-dev.txt
 
       - name: Run tests
         working-directory: backend
         run: python -m pytest tests/ -v --tb=short
 
+      # The committed schema had drifted (it still advertised the old
+      # `recognition_accuracy` field), so it is now generated and checked.
+      - name: Check docs/openapi.json matches the code
+        run: python scripts/export-openapi.py --check
+
+  # ---------------------------------------------------------------------------
+  # Same suite against real PostgreSQL and real Redis, so the shared-state
+  # backend (B4) and the SQL portability paths are exercised, not just SQLite
+  # and the in-memory limiter.
+  # ---------------------------------------------------------------------------
   backend-tests-postgres:
-    name: Backend (pytest, PostgreSQL)
+    name: Backend (pytest, PostgreSQL + Redis)
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -46,12 +69,20 @@ jobs:
           --health-interval 5s
           --health-timeout 3s
           --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v7
 
       - uses: actions/setup-python@v7
         with:
-          python-version: "3.11"
+          python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
           cache-dependency-path: backend/requirements-dev.txt
 
@@ -60,14 +91,99 @@ jobs:
 
       - name: Install dependencies
         working-directory: backend
-        run: pip install -r requirements-dev.txt
+        run: |
+          pip install --require-hashes -r requirements.txt
+          pip install --require-hashes -r requirements-dev.txt
 
-      - name: Run tests against PostgreSQL
+      - name: Run tests against PostgreSQL + Redis
         working-directory: backend
         env:
           SENTINEL_TEST_DATABASE_URL: postgresql+psycopg2://sentinel:sentinel@localhost:5432/sentinelai_test
+          # Drives the app's own shared-state backend...
+          SENTINEL_REDIS_URL: redis://localhost:6379/1
+          # ...and points the Redis-backend unit tests at a real server rather
+          # than fakeredis, so the Lua scripts run on genuine Redis.
+          SENTINEL_TEST_REDIS_URL: redis://localhost:6379/0
         run: python -m pytest tests/ -v --tb=short
 
+      - name: Assert the suite actually used Redis
+        working-directory: backend
+        env:
+          SENTINEL_REDIS_URL: redis://localhost:6379/1
+        run: |
+          python - <<'PY'
+          from app.core.shared_state import shared_state
+          assert shared_state.is_shared, (
+              f"expected the Redis backend, got {shared_state.backend_name!r} — "
+              "the multi-worker correctness tests would be meaningless"
+          )
+          print("shared-state backend:", shared_state.backend_name)
+          PY
+
+  # ---------------------------------------------------------------------------
+  # B1: the real AI engine. This is the job that must never silently degrade to
+  # the Haar fallback, so it installs insightface/onnxruntime and runs the
+  # pipeline suite with SENTINEL_REQUIRE_AI=1 — a missing engine fails here
+  # instead of skipping.
+  # ---------------------------------------------------------------------------
+  ai-engine-tests:
+    name: AI engine (insightface + ONNX Runtime)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements-ai.txt
+            backend/requirements-dev.txt
+
+      - name: Install system libs for OpenCV
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libgl1 libglib2.0-0
+
+      - name: Install dependencies (including the AI engine)
+        working-directory: backend
+        run: |
+          pip install --require-hashes -r requirements.txt
+          pip install --require-hashes -r requirements-dev.txt
+          pip install --require-hashes -r requirements-ai.txt
+
+      # The buffalo_l pack is ~300 MB; caching it keeps the job fast on a warm
+      # cache. Keyed by the pinned model version so a change re-downloads.
+      - name: Cache buffalo_l model pack
+        uses: actions/cache@v4
+        with:
+          path: ~/.insightface/models
+          key: insightface-buffalo_l-v0.7
+
+      - name: Verify the AI engine imports and the model loads
+        working-directory: backend
+        run: |
+          python - <<'PY'
+          from app.services import face_service
+          assert face_service.insightface_available(), (
+              "insightface is not usable — this job exists to exercise it"
+          )
+          face_service._get_insightface_app()
+          print("AI engine ready: insightface + onnxruntime, buffalo_l loaded")
+          PY
+
+      - name: Run the AI pipeline suite (skips are failures here)
+        working-directory: backend
+        env:
+          SENTINEL_REQUIRE_AI: "1"
+        run: python -m pytest tests/test_ai_pipeline.py -v --tb=short
+
+      - name: Run the full suite with the AI engine present
+        working-directory: backend
+        env:
+          SENTINEL_REQUIRE_AI: "1"
+        run: python -m pytest tests/ -v --tb=short
+
+  # ---------------------------------------------------------------------------
   frontend-build:
     name: Frontend (build)
     runs-on: ubuntu-latest
@@ -76,7 +192,7 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: "20"
+          node-version: ${{ env.NODE_VERSION }}
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
@@ -86,6 +202,68 @@ jobs:
           npm ci
           npm run build
 
+  # ---------------------------------------------------------------------------
+  # B5: the Playwright suite. It boots a real uvicorn backend and serves the
+  # built frontend bundle, so it exercises the production build rather than the
+  # dev server. Reports/traces are uploaded for debugging.
+  # ---------------------------------------------------------------------------
+  e2e-tests:
+    name: E2E (Playwright)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: backend/requirements-dev.txt
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install system libs for OpenCV
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libgl1 libglib2.0-0
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: |
+          pip install --require-hashes -r requirements.txt
+          pip install --require-hashes -r requirements-dev.txt
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install Playwright browsers
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Playwright tests
+        working-directory: frontend
+        env:
+          CI: "true"
+          # playwright.config.ts prefers backend/.venv when present; in CI the
+          # dependencies are on the system interpreter, so point at it directly.
+          E2E_BACKEND_PYTHON: python
+        run: npx playwright test
+
+      - name: Upload Playwright report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+          retention-days: 7
+          if-no-files-found: ignore
+
+  # ---------------------------------------------------------------------------
   docker-build:
     name: Docker images build
     runs-on: ubuntu-latest
@@ -100,8 +278,23 @@ jobs:
           context: .
           file: docker/backend.Dockerfile
           push: false
+          load: true
+          tags: sentinelai-backend:ci
           cache-from: type=gha,scope=backend
           cache-to: type=gha,scope=backend,mode=max
+
+      # Proves the shipped image contains the real engine, so a production
+      # container can never quietly fall back to Haar-cascade detection (B1).
+      - name: Verify the AI engine inside the built image
+        run: |
+          docker run --rm --entrypoint python sentinelai-backend:ci - <<'PY'
+          from app.services import face_service
+          assert face_service.insightface_available(), (
+              "the production image does not have a working AI engine"
+          )
+          face_service._get_insightface_app()
+          print("Production image AI engine OK (buffalo_l loaded offline)")
+          PY
 
       - name: Build frontend image
         uses: docker/build-push-action@v6
@@ -119,3 +312,72 @@ jobs:
           sed -i 's/^SENTINEL_DB_PASSWORD=$/SENTINEL_DB_PASSWORD=ci-validate-only/' .env
           touch docker/nginx.rendered.conf
           docker compose -f docker-compose.yml -f docker-compose.prod.yml config -q
+
+  # ---------------------------------------------------------------------------
+  # Guards against B2 regressing: the lock files must stay fully pinned and
+  # hash-verified, and must stay in sync with the .in files they derive from.
+  # ---------------------------------------------------------------------------
+  dependency-locks:
+    name: Dependency locks (pinned + hashed)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Assert every dependency is pinned and hashed
+        working-directory: backend
+        run: |
+          python - <<'PY'
+          import re, sys
+
+          failures = []
+          for name in ("requirements.txt", "requirements-dev.txt", "requirements-ai.txt"):
+              text = open(name).read()
+              # Join escaped line continuations so each requirement is one line.
+              joined = text.replace("\\\n", " ")
+              reqs = [
+                  ln for ln in joined.splitlines()
+                  if ln.strip() and not ln.lstrip().startswith("#") and not ln.startswith("-")
+              ]
+              if not reqs:
+                  failures.append(f"{name}: no requirements found")
+                  continue
+              for line in reqs:
+                  spec = line.split(";")[0]
+                  if "==" not in spec:
+                      failures.append(f"{name}: unpinned requirement: {line.strip()[:80]}")
+                  if "--hash=sha256:" not in line:
+                      pkg = re.split(r"[=<>\[ ]", line.strip())[0]
+                      failures.append(f"{name}: missing hash for {pkg}")
+              print(f"{name}: {len(reqs)} requirements, all pinned and hashed")
+
+          if failures:
+              print("\nFAILURES:", *failures, sep="\n  ")
+              sys.exit(1)
+          PY
+
+      - name: Verify locks are in sync with the .in files
+        working-directory: backend
+        run: |
+          pip install pip-tools
+          for f in requirements requirements-dev requirements-ai; do
+            cp "$f.txt" "/tmp/$f.txt.orig"
+          done
+          pip-compile --quiet --generate-hashes --strip-extras \
+            --output-file requirements.txt requirements.in
+          pip-compile --quiet --generate-hashes --strip-extras \
+            --output-file requirements-dev.txt requirements-dev.in
+          pip-compile --quiet --generate-hashes --strip-extras \
+            --output-file requirements-ai.txt requirements-ai.in
+          for f in requirements requirements-dev requirements-ai; do
+            if ! diff -q "/tmp/$f.txt.orig" "$f.txt" >/dev/null; then
+              echo "::error::$f.txt is out of date with $f.in."
+              echo "Regenerate with ./scripts/lock-requirements.sh and commit."
+              diff "/tmp/$f.txt.orig" "$f.txt" | head -40 || true
+              exit 1
+            fi
+          done
+          echo "All lock files are in sync with their .in sources."

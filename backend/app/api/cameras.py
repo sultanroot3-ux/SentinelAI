@@ -1,7 +1,8 @@
 """Camera + camera-location management."""
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.orm import Session, joinedload
 
+from app.api.utils import DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT, apply_limit
 from app.core.security import get_current_user, require_roles
 from app.db.database import get_db
 from app.models.models import Camera, CameraLocation, User
@@ -48,15 +49,14 @@ def create_location(
 # ---------- Cameras ----------
 @router.get("", response_model=list[CameraOut])
 def list_cameras(
+    response: Response,
+    limit: int = Query(DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    return (
-        db.query(Camera)
-        .options(joinedload(Camera.location))
-        .order_by(Camera.name)
-        .all()
-    )
+    q = db.query(Camera).options(joinedload(Camera.location)).order_by(Camera.name)
+    return apply_limit(q, response, limit, offset)
 
 
 @router.post("", response_model=CameraOut, status_code=201)

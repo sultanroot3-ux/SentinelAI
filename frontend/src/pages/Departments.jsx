@@ -90,8 +90,10 @@ export default function Departments() {
               render: (d) => (
                 <div className="row-actions">
                   <button
+                    type="button"
                     className="icon-btn"
                     title="Edit"
+                    aria-label={`Edit department ${d.name}`}
                     onClick={() => {
                       setForm({ name: d.name || '', description: d.description || '' });
                       setFormError('');
@@ -101,8 +103,10 @@ export default function Departments() {
                     <Icon name="edit" size={15} />
                   </button>
                   <button
+                    type="button"
                     className="icon-btn danger"
                     title="Delete"
+                    aria-label={`Delete department ${d.name}`}
                     onClick={() => setDeleteTarget(d)}
                   >
                     <Icon name="trash" size={15} />
@@ -135,16 +139,16 @@ export default function Departments() {
       >
         <div className="form-grid">
           <div className="form-field">
-            <label>Name</label>
-            <input
+            <label htmlFor="departments-name">Name</label>
+            <input id="departments-name"
               value={form.name}
               onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
               autoFocus
             />
           </div>
           <div className="form-field">
-            <label>Description</label>
-            <textarea
+            <label htmlFor="departments-description">Description</label>
+            <textarea id="departments-description"
               rows={3}
               value={form.description}
               onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}

@@ -3,15 +3,66 @@
 Media URLs (photos, snapshots) are converted to short-lived signed URLs here
 so that no serialized response ever exposes a directly-fetchable static path.
 """
-from fastapi import HTTPException, UploadFile
+from fastapi import HTTPException, Response, UploadFile
 
+from app.core import rate_limit
 from app.core.media import sign_media_path
 from app.models.models import Case, RecognitionLog, UnknownFace, User
 from app.schemas.schemas import CaseOut, RecognitionLogOut, UnknownFaceOut, UserOut
+from app.services.audit_service import write_audit
 
 # Upload cap: face frames/photos are small; anything larger is rejected before
 # it is read into memory, so a client cannot exhaust RAM with a huge "image".
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
+
+# Collection endpoints that return a bare array are bounded by this unless the
+# caller asks for fewer. Chosen to be larger than any realistic single-screen
+# render, so existing clients see no behaviour change, while still refusing to
+# read and serialize an entire table as the deployment grows.
+DEFAULT_PAGE_LIMIT = 200
+MAX_PAGE_LIMIT = 1000
+
+
+def apply_limit(query, response: Response, limit: int, offset: int):
+    """Bound a collection query and report the true total in X-Total-Count.
+
+    The response shape stays a bare array (no breaking change), but the header
+    lets a client detect that more rows exist rather than silently believing it
+    received everything.
+    """
+    total = query.order_by(None).count()
+    response.headers["X-Total-Count"] = str(total)
+    rows = query.limit(limit).offset(offset).all()
+    if offset + len(rows) < total:
+        # Make truncation observable in logs as well as to the client.
+        response.headers["X-Result-Truncated"] = "true"
+    return rows
+
+
+def enforce_quota(name: str, user: User, response: Response, db=None) -> None:
+    """Take a token from the user's bucket for `name`, or raise 429.
+
+    Sets Retry-After on both the success path (so a client can pace itself
+    without waiting for a rejection) and the 429 itself.
+    """
+    allowed, retry_after = rate_limit.check_quota(name, user.id)
+    if allowed:
+        return
+    if db is not None:
+        write_audit(
+            db,
+            "quota_exceeded",
+            f"User '{user.username}' exceeded the {name} quota",
+            user=user,
+        )
+    response.headers["Retry-After"] = str(retry_after)
+    raise HTTPException(
+        status_code=429,
+        detail=(
+            f"Rate limit exceeded for {name}. Try again in {retry_after} seconds."
+        ),
+        headers={"Retry-After": str(retry_after)},
+    )
 
 
 def read_upload_capped(file: UploadFile, max_bytes: int = MAX_UPLOAD_BYTES) -> bytes:

@@ -68,8 +68,8 @@ export default function Rbac() {
 
         <div className="filter-row spaced-top">
           <div className="form-field inline">
-            <label>Search permissions</label>
-            <input
+            <label htmlFor="rbac-search-permissions">Search permissions</label>
+            <input id="rbac-search-permissions"
               type="search"
               placeholder="Code or description…"
               value={search}

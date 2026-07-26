@@ -124,8 +124,8 @@ export default function Cameras() {
         <div className="filter-row space-between">
           <div className="filter-row">
             <div className="form-field inline">
-              <label>Search</label>
-              <input
+              <label htmlFor="cameras-search">Search</label>
+              <input id="cameras-search"
                 type="search"
                 placeholder="Name, source, location…"
                 value={search}
@@ -133,8 +133,8 @@ export default function Cameras() {
               />
             </div>
             <div className="form-field inline">
-              <label>Location</label>
-              <select value={locFilter} onChange={(e) => setLocFilter(e.target.value)}>
+              <label htmlFor="cameras-location">Location</label>
+              <select id="cameras-location" value={locFilter} onChange={(e) => setLocFilter(e.target.value)}>
                 <option value="">All</option>
                 {locations.map((l) => (
                   <option key={l.id} value={l.id}>
@@ -144,8 +144,8 @@ export default function Cameras() {
               </select>
             </div>
             <div className="form-field inline">
-              <label>Status</label>
-              <select value={activeFilter} onChange={(e) => setActiveFilter(e.target.value)}>
+              <label htmlFor="cameras-status">Status</label>
+              <select id="cameras-status" value={activeFilter} onChange={(e) => setActiveFilter(e.target.value)}>
                 <option value="">All</option>
                 <option value="true">Active</option>
                 <option value="false">Inactive</option>
@@ -191,12 +191,20 @@ export default function Cameras() {
                     sortable: false,
                     render: (c) => (
                       <div className="row-actions" onClick={(e) => e.stopPropagation()}>
-                        <button className="icon-btn" title="Edit" onClick={() => openEdit(c)}>
+                        <button
+                          type="button"
+                          className="icon-btn"
+                          title="Edit"
+                          aria-label={`Edit camera ${c.name}`}
+                          onClick={() => openEdit(c)}
+                        >
                           <Icon name="edit" size={15} />
                         </button>
                         <button
+                          type="button"
                           className="icon-btn danger"
                           title="Delete"
+                          aria-label={`Delete camera ${c.name}`}
                           onClick={() => setDeleteTarget(c)}
                         >
                           <Icon name="trash" size={15} />
@@ -237,24 +245,24 @@ export default function Cameras() {
       >
         <div className="form-grid">
           <div className="form-field">
-            <label>Name</label>
-            <input
+            <label htmlFor="cameras-name">Name</label>
+            <input id="cameras-name"
               value={form.name}
               placeholder="e.g. lobby-cam"
               onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
             />
           </div>
           <div className="form-field">
-            <label>Source (device index or stream URL)</label>
-            <input
+            <label htmlFor="cameras-source-device-index-or-stream-url">Source (device index or stream URL)</label>
+            <input id="cameras-source-device-index-or-stream-url"
               value={form.source}
               placeholder='"0" for built-in webcam, or rtsp://…'
               onChange={(e) => setForm((f) => ({ ...f, source: e.target.value }))}
             />
           </div>
           <div className="form-field">
-            <label>Location</label>
-            <select
+            <label htmlFor="cameras-location-2">Location</label>
+            <select id="cameras-location-2"
               value={form.location_id}
               onChange={(e) => setForm((f) => ({ ...f, location_id: e.target.value }))}
             >

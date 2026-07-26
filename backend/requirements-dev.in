@@ -1,0 +1,12 @@
+# Test-only dependencies. Layered on the runtime lock so dev and production
+# resolve to identical versions of every shared package.
+-c requirements.txt
+
+pytest
+httpx
+coverage
+# Exercises the Redis Lua scripts in app/core/shared_state.py without needing a
+# Redis server; lupa provides the Lua interpreter fakeredis executes them in.
+# CI additionally runs the same tests against a real Redis service container.
+fakeredis
+lupa

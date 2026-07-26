@@ -1,0 +1,16 @@
+# Real face-recognition engine: 512-d ArcFace embeddings via the buffalo_l
+# model pack. Without these the backend degrades to OpenCV Haar-cascade
+# detection with no recognition at all.
+#
+# These are NOT optional in any environment that matters:
+#   - the production image installs them (docker/backend.Dockerfile)
+#   - CI's ai-tests job installs them and runs tests/test_ai_pipeline.py with
+#     SENTINEL_REQUIRE_AI=1, so a missing engine fails the build rather than
+#     silently skipping (B1)
+#
+# They are kept in a separate file only because the lightweight CI jobs and
+# local API work do not need a ~300 MB model download.
+
+-c requirements.txt
+insightface
+onnxruntime

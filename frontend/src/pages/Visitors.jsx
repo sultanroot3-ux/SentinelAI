@@ -126,8 +126,8 @@ export default function Visitors() {
         <div className="filter-row space-between">
           <div className="filter-row">
             <div className="form-field inline">
-              <label>Search</label>
-              <input
+              <label htmlFor="visitors-search">Search</label>
+              <input id="visitors-search"
                 type="search"
                 placeholder="Name, company, host…"
                 value={search}
@@ -135,8 +135,8 @@ export default function Visitors() {
               />
             </div>
             <div className="form-field inline">
-              <label>Status</label>
-              <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+              <label htmlFor="visitors-status">Status</label>
+              <select id="visitors-status" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
                 <option value="">All</option>
                 <option value="expected">Expected</option>
                 <option value="checked_in">Checked in</option>
@@ -183,8 +183,10 @@ export default function Visitors() {
                 <div className="row-actions" onClick={(e) => e.stopPropagation()}>
                   {v.status !== 'checked_in' && (
                     <button
+                      type="button"
                       className="icon-btn"
                       title="Check in"
+                      aria-label={`Check in ${v.name}`}
                       onClick={() => setConfirmAction({ visitor: v, type: 'check-in' })}
                     >
                       <Icon name="check" size={15} />
@@ -192,14 +194,22 @@ export default function Visitors() {
                   )}
                   {v.status === 'checked_in' && (
                     <button
+                      type="button"
                       className="icon-btn"
                       title="Check out"
+                      aria-label={`Check out ${v.name}`}
                       onClick={() => setConfirmAction({ visitor: v, type: 'check-out' })}
                     >
                       <Icon name="logout" size={15} />
                     </button>
                   )}
-                  <button className="icon-btn" title="Edit" onClick={() => openEdit(v)}>
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    title="Edit"
+                    aria-label={`Edit visitor ${v.name}`}
+                    onClick={() => openEdit(v)}
+                  >
                     <Icon name="edit" size={15} />
                   </button>
                 </div>
@@ -236,22 +246,22 @@ export default function Visitors() {
       >
         <div className="form-grid two-col">
           <div className="form-field">
-            <label>Full Name</label>
-            <input
+            <label htmlFor="visitors-full-name">Full Name</label>
+            <input id="visitors-full-name"
               value={form.name}
               onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
             />
           </div>
           <div className="form-field">
-            <label>Company</label>
-            <input
+            <label htmlFor="visitors-company">Company</label>
+            <input id="visitors-company"
               value={form.company}
               onChange={(e) => setForm((f) => ({ ...f, company: e.target.value }))}
             />
           </div>
           <div className="form-field">
-            <label>Host</label>
-            <select
+            <label htmlFor="visitors-host">Host</label>
+            <select id="visitors-host"
               value={form.host_user_id}
               onChange={(e) => setForm((f) => ({ ...f, host_user_id: e.target.value }))}
             >
@@ -264,16 +274,16 @@ export default function Visitors() {
             </select>
           </div>
           <div className="form-field">
-            <label>Badge Number</label>
-            <input
+            <label htmlFor="visitors-badge-number">Badge Number</label>
+            <input id="visitors-badge-number"
               value={form.badge_number}
               onChange={(e) => setForm((f) => ({ ...f, badge_number: e.target.value }))}
             />
           </div>
         </div>
         <div className="form-field">
-          <label>Purpose of visit</label>
-          <input
+          <label htmlFor="visitors-purpose-of-visit">Purpose of visit</label>
+          <input id="visitors-purpose-of-visit"
             value={form.purpose}
             onChange={(e) => setForm((f) => ({ ...f, purpose: e.target.value }))}
           />

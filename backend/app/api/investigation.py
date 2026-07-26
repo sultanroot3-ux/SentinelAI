@@ -7,10 +7,10 @@ GET  /api/investigation/unknown/{id}  — investigation report for an unknown pe
 Identity data comes exclusively from the local database; AI attributes are
 labelled estimates (see investigation_service docstring).
 """
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile
 from sqlalchemy.orm import Session
 
-from app.api.utils import read_upload_capped
+from app.api.utils import enforce_quota, read_upload_capped
 from app.core.media import sign_media_path
 from app.core.security import require_roles
 from app.db.database import get_db
@@ -39,11 +39,16 @@ def _sign_report_media(report: dict) -> dict:
 
 @router.post("/analyze", response_model=InvestigationResponse)
 def analyze(
+    response: Response,
     file: UploadFile = File(...),
     camera: str = Query("webcam", max_length=80),
     db: Session = Depends(get_db),
     officer: User = Depends(require_roles(*_INVESTIGATOR_ROLES)),
 ):
+    # The heaviest endpoint in the system: detection + per-face heuristics +
+    # optional OCR on a 10 MB upload. Quota is tighter than recognition (B3).
+    enforce_quota("investigation", officer, response, db=db)
+
     if not face_service.insightface_available():
         raise HTTPException(
             status_code=503, detail="Face analysis engine (insightface) unavailable."

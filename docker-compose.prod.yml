@@ -12,6 +12,10 @@ services:
       driver: json-file
       options: { max-size: "10m", max-file: "5" }
 
+  redis:
+    restart: unless-stopped
+    logging: *logging
+
   backend:
     restart: unless-stopped
     logging: *logging

@@ -16,6 +16,13 @@ router = APIRouter(prefix="/api/reports", tags=["reports"])
 
 _HEADERS = ["ID", "User ID", "User Name", "Camera", "Score", "Snapshot", "Timestamp"]
 
+# A monthly report on a busy site can cover millions of recognitions, and every
+# format below materializes the whole result set — even the CSV path, which
+# streams the *encoding* but still holds every ORM row in memory first. An
+# oversized export is refused rather than silently truncated: a report that
+# looks complete but is not is worse than no report at all.
+MAX_REPORT_ROWS = 50_000
+
 
 def _log_row(log: RecognitionLog) -> list:
     return [
@@ -113,11 +120,23 @@ def visitors_report(
     _: User = Depends(require_roles("admin", "security_officer")),
 ):
     start = _period_start(period)
+    base = db.query(RecognitionLog).filter(RecognitionLog.timestamp >= start)
+
+    total = base.count()
+    if total > MAX_REPORT_ROWS:
+        raise HTTPException(
+            status_code=413,
+            detail=(
+                f"This {period} report covers {total:,} recognitions, which exceeds "
+                f"the {MAX_REPORT_ROWS:,}-row export limit. Narrow the period, or "
+                f"page through /api/logs instead."
+            ),
+        )
+
     logs = (
-        db.query(RecognitionLog)
-        .options(joinedload(RecognitionLog.user))
-        .filter(RecognitionLog.timestamp >= start)
+        base.options(joinedload(RecognitionLog.user))
         .order_by(RecognitionLog.timestamp.desc())
+        .limit(MAX_REPORT_ROWS)
         .all()
     )
     stamp = f"visitors_{period}_{date.today().isoformat()}"

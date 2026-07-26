@@ -78,15 +78,25 @@ Status: `open`, `investigating`, `closed`. Priority: `low`, `medium`, `high`, `c
 ## Analytics
 | Method | Path | Response |
 |---|---|---|
-| GET | `/api/analytics/summary` | `{total_users, today_visitors, today_unknown, open_cases, recognition_accuracy}` |
+| GET | `/api/analytics/summary` | `{total_users, today_visitors, today_unknown, open_cases, match_rate}` |
 | GET | `/api/analytics/daily?days=7` | `[{date, recognized, unknown}]` |
 | GET | `/api/analytics/peak-hours` | `[{hour, count}]` |
 | GET | `/api/analytics/cameras` | `[{camera, count}]` |
+
+`match_rate` is the percentage of detections that matched an enrolled person.
+It is **not** model accuracy: there is no ground truth behind it, and a lobby
+full of genuine strangers pushes it down while the model performs perfectly.
+It was previously named `recognition_accuracy`, which invited exactly that
+misreading.
 
 ## Reports
 | Method | Path | Notes |
 |---|---|---|
 | GET | `/api/reports/visitors?period=daily|weekly|monthly&format=csv|json` | CSV download or JSON |
+
+Exports are capped at 50,000 rows. A request whose period covers more returns
+`413` with the row count rather than a silently truncated file; narrow the
+period or page through `/api/logs`.
 
 ## Notifications
 | Method | Path | Notes |

@@ -1,9 +1,10 @@
 import Icon from './Icons';
 
-export default function StatCard({ label, value, sub, icon, tone = 'accent' }) {
+export default function StatCard({ label, value, sub, icon, tone = 'accent', title }) {
   return (
-    <div className="stat-card card">
-      <div className={`stat-card-icon tone-${tone}`}>
+    <div className="stat-card card" title={title}>
+      {/* Decorative: the adjacent label already names the statistic. */}
+      <div className={`stat-card-icon tone-${tone}`} aria-hidden="true">
         <Icon name={icon} size={20} />
       </div>
       <div className="stat-card-body">

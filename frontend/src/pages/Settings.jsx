@@ -113,11 +113,12 @@ export default function Settings() {
       <div className="card pad settings-card">
         <h2>Recognition</h2>
         <div className="form-field">
-          <label>
+          <label htmlFor="settings-recognition-threshold">
             Recognition threshold —{' '}
             <strong className="accent-text">{Number(form.recognition_threshold).toFixed(2)}</strong>
           </label>
           <input
+            id="settings-recognition-threshold"
             type="range"
             min="0"
             max="1"
@@ -126,8 +127,12 @@ export default function Settings() {
             onChange={(e) =>
               setForm((f) => ({ ...f, recognition_threshold: Number(e.target.value) }))
             }
+            // A slider announces only its numeric value without these: the
+            // description carries the meaning of "higher = stricter".
+            aria-describedby="settings-recognition-threshold-help"
+            aria-valuetext={`${Number(form.recognition_threshold).toFixed(2)}`}
           />
-          <span className="muted-text">
+          <span className="muted-text" id="settings-recognition-threshold-help">
             Lower = more matches (more false positives). Higher = stricter matching. Default 0.45.
           </span>
         </div>
@@ -149,8 +154,8 @@ export default function Settings() {
 
         <h2 className="section-gap">Camera</h2>
         <div className="form-field">
-          <label>Camera source</label>
-          <input
+          <label htmlFor="settings-camera-source">Camera source</label>
+          <input id="settings-camera-source"
             value={form.camera_source}
             onChange={(e) => setForm((f) => ({ ...f, camera_source: e.target.value }))}
             placeholder='Device index (e.g. "0") or stream URL'
@@ -162,8 +167,8 @@ export default function Settings() {
 
         <h2 className="section-gap">Data Retention</h2>
         <div className="form-field">
-          <label>Unknown-visitor retention (days)</label>
-          <input
+          <label htmlFor="settings-unknown-visitor-retention-days">Unknown-visitor retention (days)</label>
+          <input id="settings-unknown-visitor-retention-days"
             type="number"
             min="0"
             max="3650"
@@ -214,16 +219,16 @@ export default function Settings() {
           </label>
           <div className="form-grid two-col">
             <div className="form-field">
-              <label>SMTP host</label>
-              <input
+              <label htmlFor="settings-smtp-host">SMTP host</label>
+              <input id="settings-smtp-host"
                 value={form.smtp_host}
                 onChange={(e) => setForm((f) => ({ ...f, smtp_host: e.target.value }))}
                 placeholder="smtp.gmail.com"
               />
             </div>
             <div className="form-field">
-              <label>SMTP port</label>
-              <input
+              <label htmlFor="settings-smtp-port">SMTP port</label>
+              <input id="settings-smtp-port"
                 type="number"
                 value={form.smtp_port}
                 onChange={(e) => setForm((f) => ({ ...f, smtp_port: e.target.value }))}
@@ -231,16 +236,16 @@ export default function Settings() {
               />
             </div>
             <div className="form-field">
-              <label>Username</label>
-              <input
+              <label htmlFor="settings-username">Username</label>
+              <input id="settings-username"
                 value={form.smtp_user}
                 onChange={(e) => setForm((f) => ({ ...f, smtp_user: e.target.value }))}
                 placeholder="user@example.com"
               />
             </div>
             <div className="form-field">
-              <label>Password</label>
-              <input
+              <label htmlFor="settings-password">Password</label>
+              <input id="settings-password"
                 type="password"
                 value={form.smtp_password}
                 onChange={(e) => setForm((f) => ({ ...f, smtp_password: e.target.value }))}
@@ -248,16 +253,16 @@ export default function Settings() {
               />
             </div>
             <div className="form-field">
-              <label>From address</label>
-              <input
+              <label htmlFor="settings-from-address">From address</label>
+              <input id="settings-from-address"
                 value={form.smtp_from}
                 onChange={(e) => setForm((f) => ({ ...f, smtp_from: e.target.value }))}
                 placeholder="alerts@example.com"
               />
             </div>
             <div className="form-field">
-              <label>To addresses</label>
-              <input
+              <label htmlFor="settings-to-addresses">To addresses</label>
+              <input id="settings-to-addresses"
                 value={form.smtp_to}
                 onChange={(e) => setForm((f) => ({ ...f, smtp_to: e.target.value }))}
                 placeholder="a@example.com, b@example.com"
@@ -296,8 +301,8 @@ export default function Settings() {
           </label>
           <div className="form-grid two-col">
             <div className="form-field">
-              <label>Bot token</label>
-              <input
+              <label htmlFor="settings-bot-token">Bot token</label>
+              <input id="settings-bot-token"
                 type="password"
                 value={form.telegram_bot_token}
                 onChange={(e) => setForm((f) => ({ ...f, telegram_bot_token: e.target.value }))}
@@ -305,8 +310,8 @@ export default function Settings() {
               />
             </div>
             <div className="form-field">
-              <label>Chat ID</label>
-              <input
+              <label htmlFor="settings-chat-id">Chat ID</label>
+              <input id="settings-chat-id"
                 value={form.telegram_chat_id}
                 onChange={(e) => setForm((f) => ({ ...f, telegram_chat_id: e.target.value }))}
                 placeholder="123456789"
@@ -332,8 +337,8 @@ export default function Settings() {
             </span>
           </label>
           <div className="form-field">
-            <label>Webhook URL</label>
-            <input
+            <label htmlFor="settings-webhook-url">Webhook URL</label>
+            <input id="settings-webhook-url"
               type="password"
               value={form.discord_webhook_url}
               onChange={(e) => setForm((f) => ({ ...f, discord_webhook_url: e.target.value }))}

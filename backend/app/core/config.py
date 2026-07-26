@@ -56,6 +56,12 @@ class Settings(BaseSettings):
 
     CORS_ORIGINS: list[str] = ["http://localhost:5173"]
 
+    # Shared state for rate limiting and face-pipeline cooldowns (B4). Empty =
+    # per-process in-memory state, which is only correct with a single worker.
+    # Set e.g. redis://redis:6379/0 whenever UVICORN_WORKERS > 1 or more than
+    # one backend instance runs — see app.core.shared_state.
+    REDIS_URL: str = ""
+
     # Reverse proxies whose X-Forwarded-For header may be trusted for client-IP
     # resolution (rate limiting). Empty = trust nothing (XFF ignored). Set to
     # the proxy/LB address or CIDR in production, e.g. ["172.16.0.0/12"] for the
@@ -75,6 +81,19 @@ class Settings(BaseSettings):
     def is_production(self) -> bool:
         return self.ENV.lower() == "production"
 
+    @property
+    def worker_count(self) -> int:
+        """Uvicorn worker processes, as the entrypoint will actually launch them.
+
+        Read from the environment rather than a setting because it is consumed
+        by the entrypoint shell script, not by the app — but the app must know
+        it to validate that shared state is configured (see B4).
+        """
+        try:
+            return max(int(os.environ.get("UVICORN_WORKERS", "1")), 1)
+        except ValueError:
+            return 1
+
     def validate_for_environment(self) -> None:
         """Fail fast on unsafe production configuration (called at startup)."""
         if not self.is_production:
@@ -91,6 +110,16 @@ class Settings(BaseSettings):
             problems.append(
                 "SENTINEL_DATABASE_URL is not set — production must not fall "
                 "back to the SQLite dev database."
+            )
+        # Multi-worker without shared state means per-worker rate limits and
+        # per-worker pipeline cooldowns (B4). Refuse rather than silently
+        # multiplying the login attempt allowance by the worker count.
+        if self.worker_count > 1 and not self.REDIS_URL:
+            problems.append(
+                f"UVICORN_WORKERS={self.worker_count} but SENTINEL_REDIS_URL is "
+                "not set — login rate limiting and face-pipeline cooldowns would "
+                "be per-worker. Set SENTINEL_REDIS_URL (e.g. redis://redis:6379/0) "
+                "or run a single worker."
             )
         if problems:
             raise RuntimeError(

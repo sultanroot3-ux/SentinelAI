@@ -1,9 +1,10 @@
 """Visitor registration + check-in / check-out."""
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.orm import Session, joinedload
 
+from app.api.utils import DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT, apply_limit
 from app.core.security import require_roles
 from app.db.database import get_db
 from app.models.models import AccessHistory, User, Visitor
@@ -34,14 +35,20 @@ def _serialize(v: Visitor) -> VisitorOut:
 
 @router.get("", response_model=list[VisitorOut])
 def list_visitors(
+    response: Response,
     status: str | None = None,
+    limit: int = Query(DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     _: User = Depends(require_roles(*_VISITOR_ROLES)),
 ):
+    # Visitors accumulate for the life of the deployment — the only list here
+    # with genuinely unbounded growth.
     q = db.query(Visitor).options(joinedload(Visitor.host))
     if status:
         q = q.filter(Visitor.status == status)
-    return [_serialize(v) for v in q.order_by(Visitor.created_at.desc()).all()]
+    rows = apply_limit(q.order_by(Visitor.created_at.desc()), response, limit, offset)
+    return [_serialize(v) for v in rows]
 
 
 @router.post("", response_model=VisitorOut, status_code=201)

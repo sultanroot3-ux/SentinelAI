@@ -20,6 +20,7 @@ from email.mime.text import MIMEText
 import requests
 from sqlalchemy.orm import Session
 
+from app.core.redaction import redact_endpoint, scrub
 from app.models.models import Notification
 from app.services.settings_service import get_all_settings
 
@@ -31,6 +32,32 @@ TELEGRAM_API_BASE = os.environ.get(
 )
 
 _LEVEL_EMOJI = {"info": "ℹ️", "warning": "⚠️", "alert": "🚨"}
+
+# Hosts Discord serves webhooks from. The webhook URL is admin-configurable and
+# fetched by the server, so it is only safe if it cannot be aimed at an
+# arbitrary host — see _send_discord.
+_DISCORD_WEBHOOK_HOSTS = frozenset(
+    {"discord.com", "www.discord.com", "discordapp.com", "www.discordapp.com",
+     "ptb.discord.com", "canary.discord.com"}
+)
+
+
+def is_valid_discord_webhook(url: str) -> bool:
+    """True only for an https Discord webhook URL on a known Discord host."""
+    from urllib.parse import urlparse
+
+    try:
+        parsed = urlparse(url)
+    except ValueError:
+        return False
+    if parsed.scheme != "https":
+        return False
+    # Reject embedded credentials/ports that could be used to smuggle a target.
+    if parsed.username or parsed.password or parsed.port:
+        return False
+    if (parsed.hostname or "").lower() not in _DISCORD_WEBHOOK_HOSTS:
+        return False
+    return parsed.path.startswith("/api/webhooks/")
 
 
 def create_notification(
@@ -92,8 +119,14 @@ def _send_email(cfg: dict, title: str, message: str, level: str) -> None:
                 smtp.login(user, password)
             smtp.sendmail(sender, [a.strip() for a in to.split(",")], msg.as_string())
         logger.info("Email notification sent to %s", to)
-    except Exception:
-        logger.exception("Email notification failed")
+    except Exception as exc:
+        # SMTP errors quote the server's response, which can echo parts of the
+        # AUTH exchange. Scrubbing the password is cheap insurance.
+        logger.error(
+            "Email notification failed (%s): %s",
+            host,
+            scrub(exc, cfg.get("smtp_password")),
+        )
 
 
 def _send_telegram(cfg: dict, title: str, message: str, level: str) -> None:
@@ -111,14 +144,34 @@ def _send_telegram(cfg: dict, title: str, message: str, level: str) -> None:
         )
         resp.raise_for_status()
         logger.info("Telegram notification sent (chat %s)", chat_id)
-    except Exception:
-        logger.exception("Telegram notification failed")
+    except Exception as exc:
+        # Not logger.exception: requests embeds the full request URL in its
+        # error text, and the Telegram bot token lives in that URL's path. The
+        # traceback is dropped deliberately in favour of a scrubbed message.
+        logger.error(
+            "Telegram notification failed (%s): %s",
+            redact_endpoint(TELEGRAM_API_BASE),
+            scrub(exc, token),
+        )
 
 
 def _send_discord(cfg: dict, title: str, message: str, level: str) -> None:
     url = cfg.get("discord_webhook_url")
     if not url:
         logger.warning("Discord enabled but webhook URL not configured.")
+        return
+    if not is_valid_discord_webhook(url):
+        # An admin-settable, server-fetched URL is a server-side request forgery
+        # primitive: pointed at 169.254.169.254 or an internal service it turns
+        # the backend into a proxy for the private network. Restricting it to
+        # Discord's own hosts removes the primitive entirely.
+        # The rejected value is still a credential — it is typically a webhook
+        # for *some* service, just not Discord's. Log where it pointed, not the
+        # secret path that authenticates against it.
+        logger.error(
+            "Refusing to send Discord notification: %s is not a Discord webhook URL",
+            redact_endpoint(url),
+        )
         return
     try:
         color = {"info": 0x0BA5C9, "warning": 0xD97706, "alert": 0xDC2626}.get(level, 0x64748B)
@@ -138,5 +191,11 @@ def _send_discord(cfg: dict, title: str, message: str, level: str) -> None:
         )
         resp.raise_for_status()
         logger.info("Discord notification sent")
-    except Exception:
-        logger.exception("Discord notification failed")
+    except Exception as exc:
+        # Same hazard as Telegram: the whole webhook URL is the credential and
+        # requests echoes it in the error text.
+        logger.error(
+            "Discord notification failed (%s): %s",
+            redact_endpoint(url),
+            scrub(exc, url),
+        )

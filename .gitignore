@@ -36,3 +36,9 @@ docker/certs/
 backups/
 docker/nginx.rendered.conf
 docker/models/*.zip
+
+# Test coverage artifacts
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml

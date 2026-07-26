@@ -2,11 +2,17 @@
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile
 from sqlalchemy import or_
 from sqlalchemy.orm import Session, joinedload
 
-from app.api.utils import read_upload_capped, serialize_user
+from app.api.utils import (
+    DEFAULT_PAGE_LIMIT,
+    MAX_PAGE_LIMIT,
+    apply_limit,
+    read_upload_capped,
+    serialize_user,
+)
 from app.core.config import settings
 from app.core.security import get_current_user, hash_password, require_roles
 from app.db.database import get_db
@@ -22,9 +28,12 @@ ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
 
 @router.get("", response_model=list[UserOut])
 def list_users(
+    response: Response,
     search: str | None = None,
     department_id: int | None = None,
     role: str | None = None,
+    limit: int = Query(DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
@@ -43,7 +52,8 @@ def list_users(
         query = query.filter(User.department_id == department_id)
     if role:
         query = query.filter(User.role == role)
-    return [serialize_user(u) for u in query.order_by(User.id).all()]
+    rows = apply_limit(query.order_by(User.id), response, limit, offset)
+    return [serialize_user(u) for u in rows]
 
 
 @router.post("", response_model=UserOut, status_code=201)

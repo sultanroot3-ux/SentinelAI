@@ -1,8 +1,8 @@
 """Recognition endpoint: analyze a single frame."""
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile
 from sqlalchemy.orm import Session
 
-from app.api.utils import read_upload_capped, serialize_user
+from app.api.utils import enforce_quota, read_upload_capped, serialize_user
 from app.core.security import get_current_user
 from app.db.database import get_db
 from app.models.models import User
@@ -14,11 +14,16 @@ router = APIRouter(prefix="/api/recognition", tags=["recognition"])
 
 @router.post("/frame", response_model=RecognitionResponse, response_model_exclude_none=False)
 def recognize_frame(
+    response: Response,
     file: UploadFile = File(...),
     camera: str = Query("webcam", max_length=80),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
+    # Each request runs a full model inference on an up-to-10 MB upload; without
+    # a quota any authenticated account can saturate the worker pool (B3).
+    enforce_quota("recognition", current_user, response)
+
     if not face_service.cv2_available():
         raise HTTPException(
             status_code=503,

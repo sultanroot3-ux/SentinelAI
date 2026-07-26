@@ -173,8 +173,8 @@ export default function Users() {
         <div className="filter-row space-between">
           <div className="filter-row">
             <div className="form-field inline">
-              <label>Search</label>
-              <input
+              <label htmlFor="users-search">Search</label>
+              <input id="users-search"
                 type="search"
                 placeholder="Name, email, username…"
                 value={search}
@@ -182,8 +182,8 @@ export default function Users() {
               />
             </div>
             <div className="form-field inline">
-              <label>Role</label>
-              <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}>
+              <label htmlFor="users-role">Role</label>
+              <select id="users-role" value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}>
                 <option value="">All</option>
                 {ROLES.map((r) => (
                   <option key={r} value={r}>
@@ -193,8 +193,8 @@ export default function Users() {
               </select>
             </div>
             <div className="form-field inline">
-              <label>Department</label>
-              <select value={deptFilter} onChange={(e) => setDeptFilter(e.target.value)}>
+              <label htmlFor="users-department">Department</label>
+              <select id="users-department" value={deptFilter} onChange={(e) => setDeptFilter(e.target.value)}>
                 <option value="">All</option>
                 {departments.map((d) => (
                   <option key={d.id} value={d.id}>
@@ -264,22 +264,43 @@ export default function Users() {
               sortable: false,
               render: (u) => (
                 <div className="row-actions" onClick={(e) => e.stopPropagation()}>
+                  {/* aria-label carries the row subject: a screen reader
+                      otherwise announces a column of identical "Edit" buttons
+                      with no way to tell which employee each belongs to.
+                      title alone is not a reliable accessible name and is
+                      never surfaced on touch devices. */}
                   <button
+                    type="button"
                     className="icon-btn"
                     title="Investigation report"
+                    aria-label={`Investigation report for ${u.name}`}
                     onClick={() => navigate(`/investigation?employee=${u.id}`)}
                   >
                     <Icon name="eye" size={15} />
                   </button>
-                  <button className="icon-btn" title="Upload photo" onClick={() => pickPhoto(u)}>
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    title="Upload photo"
+                    aria-label={`Upload photo for ${u.name}`}
+                    onClick={() => pickPhoto(u)}
+                  >
                     <Icon name="upload" size={15} />
                   </button>
-                  <button className="icon-btn" title="Edit" onClick={() => openEdit(u)}>
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    title="Edit"
+                    aria-label={`Edit ${u.name}`}
+                    onClick={() => openEdit(u)}
+                  >
                     <Icon name="edit" size={15} />
                   </button>
                   <button
+                    type="button"
                     className="icon-btn danger"
                     title="Delete"
+                    aria-label={`Delete ${u.name}`}
                     onClick={() => setDeleteTarget(u)}
                   >
                     <Icon name="trash" size={15} />
@@ -313,27 +334,27 @@ export default function Users() {
       >
         <div className="form-grid two-col">
           <div className="form-field">
-            <label>Full Name</label>
-            <input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
+            <label htmlFor="users-full-name">Full Name</label>
+            <input id="users-full-name" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
           </div>
           <div className="form-field">
-            <label>Email</label>
-            <input
+            <label htmlFor="users-email">Email</label>
+            <input id="users-email"
               type="email"
               value={form.email}
               onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
             />
           </div>
           <div className="form-field">
-            <label>Username</label>
-            <input
+            <label htmlFor="users-username">Username</label>
+            <input id="users-username"
               value={form.username}
               onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))}
             />
           </div>
           <div className="form-field">
-            <label>{editing === 'new' ? 'Password' : 'New Password (leave blank to keep)'}</label>
-            <input
+            <label htmlFor="users-field">{editing === 'new' ? 'Password' : 'New Password (leave blank to keep)'}</label>
+            <input id="users-field"
               type="password"
               value={form.password}
               onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
@@ -341,8 +362,8 @@ export default function Users() {
             />
           </div>
           <div className="form-field">
-            <label>Role</label>
-            <select value={form.role} onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))}>
+            <label htmlFor="users-role-2">Role</label>
+            <select id="users-role-2" value={form.role} onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))}>
               {ROLES.map((r) => (
                 <option key={r} value={r}>
                   {r.replace('_', ' ')}
@@ -351,8 +372,8 @@ export default function Users() {
             </select>
           </div>
           <div className="form-field">
-            <label>Department</label>
-            <select
+            <label htmlFor="users-department-2">Department</label>
+            <select id="users-department-2"
               value={form.department_id}
               onChange={(e) => setForm((f) => ({ ...f, department_id: e.target.value }))}
             >
@@ -365,52 +386,52 @@ export default function Users() {
             </select>
           </div>
           <div className="form-field">
-            <label>Employee ID</label>
-            <input
+            <label htmlFor="users-employee-id">Employee ID</label>
+            <input id="users-employee-id"
               value={form.employee_id}
               onChange={(e) => setForm((f) => ({ ...f, employee_id: e.target.value }))}
             />
           </div>
           <div className="form-field">
-            <label>Access Level</label>
-            <input
+            <label htmlFor="users-access-level">Access Level</label>
+            <input id="users-access-level"
               value={form.access_level}
               placeholder="e.g. full, standard, restricted"
               onChange={(e) => setForm((f) => ({ ...f, access_level: e.target.value }))}
             />
           </div>
           <div className="form-field">
-            <label>Job Title</label>
-            <input
+            <label htmlFor="users-job-title">Job Title</label>
+            <input id="users-job-title"
               value={form.job_title}
               onChange={(e) => setForm((f) => ({ ...f, job_title: e.target.value }))}
             />
           </div>
           <div className="form-field">
-            <label>Office / Building</label>
-            <input
+            <label htmlFor="users-office-building">Office / Building</label>
+            <input id="users-office-building"
               value={form.office_building}
               onChange={(e) => setForm((f) => ({ ...f, office_building: e.target.value }))}
             />
           </div>
           <div className="form-field">
-            <label>Badge Number</label>
-            <input
+            <label htmlFor="users-badge-number">Badge Number</label>
+            <input id="users-badge-number"
               value={form.badge_number}
               onChange={(e) => setForm((f) => ({ ...f, badge_number: e.target.value }))}
             />
           </div>
           <div className="form-field">
-            <label>Phone</label>
-            <input
+            <label htmlFor="users-phone">Phone</label>
+            <input id="users-phone"
               type="tel"
               value={form.phone}
               onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
             />
           </div>
           <div className="form-field">
-            <label>Status</label>
-            <select
+            <label htmlFor="users-status">Status</label>
+            <select id="users-status"
               value={form.status}
               onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}
             >

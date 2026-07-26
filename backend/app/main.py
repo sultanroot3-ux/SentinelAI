@@ -103,7 +103,15 @@ def _seed_database_once() -> None:
                 )
             )
             db.commit()
-            logger.info("Seeded default admin user (admin / admin123)")
+            # The bootstrap password is deliberately NOT logged: log files are
+            # shipped to aggregators and kept far longer than the few minutes
+            # the credential is meant to live. It is documented in
+            # docs/INSTALL.md and must be rotated at first login
+            # (must_change_password above forces this).
+            logger.info(
+                "Seeded default admin user 'admin' with the documented bootstrap "
+                "password; a password change is forced on first login."
+            )
 
         seed_default_settings(db)
         seed_rbac(db)
@@ -128,6 +136,26 @@ async def lifespan(app: FastAPI):
     from app.services.retention_service import retention_loop
 
     retention_task = asyncio.create_task(retention_loop())
+    # Re-stated at startup because SharedState is constructed at import time —
+    # before setup_logging() installs handlers — so its own selection message is
+    # emitted into the void. Whether rate limits are actually shared is a
+    # correctness property of a multi-worker deployment (B4), so an operator
+    # must be able to confirm it from the logs.
+    from app.core.shared_state import shared_state
+
+    if shared_state.is_shared or settings.worker_count == 1:
+        logger.info(
+            "Shared state backend: %s (workers=%d).",
+            shared_state.backend_name,
+            settings.worker_count,
+        )
+    else:
+        logger.error(
+            "Shared state backend is %r with %d workers — rate limits and "
+            "pipeline cooldowns are PER-WORKER. Set SENTINEL_REDIS_URL.",
+            shared_state.backend_name,
+            settings.worker_count,
+        )
     logger.info("SentinelAI backend ready (env=%s).", settings.ENV)
     yield
     retention_task.cancel()
@@ -158,6 +186,16 @@ async def security_headers(request: Request, call_next):
     response.headers.setdefault("Referrer-Policy", "no-referrer")
     response.headers.setdefault(
         "Permissions-Policy", "camera=(), microphone=(), geolocation=()"
+    )
+    # nginx sets a CSP for the dashboard, but the API must carry its own: any
+    # deployment that reaches the backend directly (development, a different
+    # proxy, a probe on the container port) would otherwise have none. The API
+    # returns JSON and images only, so it can afford a maximally restrictive
+    # policy — nothing here is ever a document context.
+    response.headers.setdefault(
+        "Content-Security-Policy",
+        "default-src 'none'; img-src 'self' data:; frame-ancestors 'none'; "
+        "base-uri 'none'; form-action 'none'",
     )
     if settings.is_production:
         response.headers.setdefault(

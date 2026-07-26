@@ -12,7 +12,6 @@ frame -> detect faces -> liveness -> embed -> cosine match vs registered users
 """
 import logging
 import threading
-import time
 import uuid
 from collections import deque
 from datetime import datetime
@@ -356,12 +355,23 @@ def _save_unknown_snapshot(img, box) -> str | None:
 # Main pipeline
 # ---------------------------------------------------------------------------
 # Rate limits so a live camera doesn't flood the database:
-#  - one UnknownFace row per cooldown window
+#  - one UnknownFace row per camera per cooldown window
 #  - one RecognitionLog per user per cooldown window
-_last_unknown_saved_at: float = 0.0
+#
+# These live in shared_state, not module globals (B4). As per-process dicts the
+# cooldowns fired once per window *per worker*, so the shipped 2-worker
+# production config produced up to double the intended rows and alerts. The
+# unknown-face cooldown is also keyed per camera: a global key meant a second
+# camera's first sighting was silently swallowed by the first camera's.
 _UNKNOWN_COOLDOWN_SECONDS = 10.0
-_last_user_logged_at: dict[int, float] = {}
 _RECOG_LOG_COOLDOWN_SECONDS = 30.0
+
+
+def reset_cooldowns() -> None:
+    """Test helper: clear recognition/unknown cooldown state."""
+    from app.core.shared_state import shared_state
+
+    shared_state.reset_all()
 
 
 def process_frame(image_bytes: bytes, db: Session, camera: str = "webcam",
@@ -469,11 +479,13 @@ def _camera_id_for(db: Session, camera: str) -> int | None:
 
 def _record_recognition(db: Session, user: User, camera: str, score: float) -> None:
     """Persist a RecognitionLog + AccessHistory, once per user per cooldown."""
-    now = time.monotonic()
-    last = _last_user_logged_at.get(user.id, 0.0)
-    if now - last < _RECOG_LOG_COOLDOWN_SECONDS:
+    from app.core.shared_state import shared_state
+
+    # Atomic across workers: exactly one caller wins the window.
+    if not shared_state.cooldown_acquire(
+        f"cooldown:recognition:{user.id}", _RECOG_LOG_COOLDOWN_SECONDS
+    ):
         return
-    _last_user_logged_at[user.id] = now
     camera_id = _camera_id_for(db, camera)
     db.add(RecognitionLog(user_id=user.id, camera=camera, camera_id=camera_id,
                           score=round(score, 4)))
@@ -484,11 +496,12 @@ def _record_recognition(db: Session, user: User, camera: str, score: float) -> N
 
 def _record_unknown(db: Session, img, box, camera: str, embedding=None) -> None:
     """Persist an UnknownFace row (+ id, embedding, access history), rate-limited."""
-    global _last_unknown_saved_at
-    now = time.monotonic()
-    if now - _last_unknown_saved_at < _UNKNOWN_COOLDOWN_SECONDS:
+    from app.core.shared_state import shared_state
+
+    if not shared_state.cooldown_acquire(
+        f"cooldown:unknown:{camera}", _UNKNOWN_COOLDOWN_SECONDS
+    ):
         return
-    _last_unknown_saved_at = now
 
     snapshot_url = _save_unknown_snapshot(img, box)
     camera_id = _camera_id_for(db, camera)

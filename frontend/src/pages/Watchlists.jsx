@@ -130,8 +130,8 @@ export default function Watchlists() {
       <div className="card pad">
         <div className="filter-row space-between">
           <div className="form-field inline">
-            <label>Search</label>
-            <input
+            <label htmlFor="watchlists-search">Search</label>
+            <input id="watchlists-search"
               type="search"
               placeholder="List, person, reason…"
               value={search}
@@ -181,8 +181,10 @@ export default function Watchlists() {
                   <Icon name="plus" size={14} /> Add Entry
                 </button>
                 <button
+                  type="button"
                   className="icon-btn danger"
                   title="Delete watchlist"
+                  aria-label={`Delete watchlist ${wl.name}`}
                   onClick={() => setDeleteTarget({ type: 'list', list: wl })}
                 >
                   <Icon name="trash" size={15} />
@@ -210,8 +212,12 @@ export default function Watchlists() {
                       <span className="muted-text"> · added {fmtDate(e.created_at)}</span>
                     </span>
                     <button
+                      type="button"
                       className="icon-btn danger"
                       title="Remove entry"
+                      aria-label={`Remove ${
+                        e.user_name || e.unknown_person_id || `record #${e.unknown_face_id}`
+                      } from watchlist ${wl.name}`}
                       onClick={() => setDeleteTarget({ type: 'entry', list: wl, entry: e })}
                     >
                       <Icon name="x" size={14} />
@@ -244,22 +250,22 @@ export default function Watchlists() {
         }
       >
         <div className="form-field">
-          <label>Name</label>
-          <input
+          <label htmlFor="watchlists-name">Name</label>
+          <input id="watchlists-name"
             value={form.name}
             onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
           />
         </div>
         <div className="form-field">
-          <label>Description</label>
-          <input
+          <label htmlFor="watchlists-description">Description</label>
+          <input id="watchlists-description"
             value={form.description}
             onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
           />
         </div>
         <div className="form-field">
-          <label>Alert level</label>
-          <select
+          <label htmlFor="watchlists-alert-level">Alert level</label>
+          <select id="watchlists-alert-level"
             value={form.level}
             onChange={(e) => setForm((f) => ({ ...f, level: e.target.value }))}
           >
@@ -287,8 +293,8 @@ export default function Watchlists() {
         }
       >
         <div className="form-field">
-          <label>Subject</label>
-          <select
+          <label htmlFor="watchlists-subject">Subject</label>
+          <select id="watchlists-subject"
             value={entryForm.subject_type}
             onChange={(e) => setEntryForm((f) => ({ ...f, subject_type: e.target.value }))}
           >
@@ -298,8 +304,8 @@ export default function Watchlists() {
         </div>
         {entryForm.subject_type === 'employee' ? (
           <div className="form-field">
-            <label>Employee</label>
-            <select
+            <label htmlFor="watchlists-employee">Employee</label>
+            <select id="watchlists-employee"
               value={entryForm.user_id}
               onChange={(e) => setEntryForm((f) => ({ ...f, user_id: e.target.value }))}
             >
@@ -313,8 +319,8 @@ export default function Watchlists() {
           </div>
         ) : (
           <div className="form-field">
-            <label>Unknown person record ID (from Unknown Visitors)</label>
-            <input
+            <label htmlFor="watchlists-unknown-person-record-id-from-unknown-vi">Unknown person record ID (from Unknown Visitors)</label>
+            <input id="watchlists-unknown-person-record-id-from-unknown-vi"
               type="number"
               min="1"
               value={entryForm.unknown_face_id}
@@ -325,8 +331,8 @@ export default function Watchlists() {
           </div>
         )}
         <div className="form-field">
-          <label>Reason</label>
-          <input
+          <label htmlFor="watchlists-reason">Reason</label>
+          <input id="watchlists-reason"
             value={entryForm.reason}
             onChange={(e) => setEntryForm((f) => ({ ...f, reason: e.target.value }))}
           />

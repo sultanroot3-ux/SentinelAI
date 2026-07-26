@@ -60,8 +60,8 @@ export default function AccessHistory() {
         <div className="filter-row space-between">
           <div className="filter-row">
             <div className="form-field inline">
-              <label>Event</label>
-              <select value={eventFilter} onChange={(e) => setEventFilter(e.target.value)}>
+              <label htmlFor="accesshistory-event">Event</label>
+              <select id="accesshistory-event" value={eventFilter} onChange={(e) => setEventFilter(e.target.value)}>
                 <option value="">All</option>
                 {EVENTS.map((ev) => (
                   <option key={ev} value={ev}>
@@ -71,8 +71,8 @@ export default function AccessHistory() {
               </select>
             </div>
             <div className="form-field inline">
-              <label>Employee</label>
-              <select value={userFilter} onChange={(e) => setUserFilter(e.target.value)}>
+              <label htmlFor="accesshistory-employee">Employee</label>
+              <select id="accesshistory-employee" value={userFilter} onChange={(e) => setUserFilter(e.target.value)}>
                 <option value="">All</option>
                 {users.map((u) => (
                   <option key={u.id} value={u.id}>

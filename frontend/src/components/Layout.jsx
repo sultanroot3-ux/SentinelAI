@@ -84,14 +84,19 @@ export default function Layout() {
 
   return (
     <div className="app-shell">
+      {/* Keyboard users would otherwise tab through the whole sidebar on
+          every page before reaching the content. */}
+      <a className="skip-link" href="#main-content">
+        Skip to main content
+      </a>
       <aside className="sidebar">
         <div className="sidebar-logo">
-          <span className="sidebar-logo-shield">🛡</span>
+          <span className="sidebar-logo-shield" aria-hidden="true">🛡</span>
           <span className="sidebar-logo-text">
             Sentinel<span className="accent-text">AI</span>
           </span>
         </div>
-        <nav className="sidebar-nav">
+        <nav className="sidebar-nav" aria-label="Main navigation">
           {NAV.filter((item) => !item.roles || item.roles.includes(user?.role)).map((item) => (
             <NavLink
               key={item.to}
@@ -115,22 +120,40 @@ export default function Layout() {
           <h1 className="topbar-title">{current ? current.label : 'SentinelAI'}</h1>
           <div className="topbar-actions">
             <button
+              type="button"
               className="icon-btn"
               onClick={toggleTheme}
               title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+              aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
             >
               <Icon name={theme === 'dark' ? 'sun' : 'moon'} />
             </button>
             <button
+              type="button"
               className="icon-btn bell-btn"
               onClick={() => navigate('/notifications')}
               title="Notifications"
+              aria-label={
+                unread > 0 ? `Notifications, ${unread} unread` : 'Notifications'
+              }
             >
               <Icon name="bell" />
-              {unread > 0 && <span className="bell-badge">{unread > 99 ? '99+' : unread}</span>}
+              {/* The count is already in the button's accessible name above;
+                  announcing it twice is noise. */}
+              {unread > 0 && (
+                <span className="bell-badge" aria-hidden="true">
+                  {unread > 99 ? '99+' : unread}
+                </span>
+              )}
             </button>
             <div className="user-menu" ref={menuRef}>
-              <button className="user-menu-trigger" onClick={() => setMenuOpen((o) => !o)}>
+              <button
+                type="button"
+                className="user-menu-trigger"
+                onClick={() => setMenuOpen((o) => !o)}
+                aria-expanded={menuOpen}
+                aria-haspopup="menu"
+              >
                 <span className="avatar">
                   {user?.photo_url ? (
                     <img src={user.photo_url} alt="" />
@@ -163,7 +186,7 @@ export default function Layout() {
             </div>
           </div>
         </header>
-        <main className="content">
+        <main className="content" id="main-content" tabIndex={-1}>
           <Outlet />
         </main>
       </div>
