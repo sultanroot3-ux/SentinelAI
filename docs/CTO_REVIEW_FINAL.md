@@ -20,7 +20,7 @@ actually executed; §7 lists what could *not* be verified locally and why.
 | **B2** | Pin all Python dependencies / lock file for deterministic builds | **Resolved — verified** |
 | **B3** | Rate limiting on expensive AI endpoints | **Resolved — verified live** |
 | **B4** | Replace per-process rate limiting and cooldowns with shared backend | **Resolved — verified live** |
-| **B5** | Playwright E2E integrated into GitHub Actions on PR and push to main | **Resolved — verified locally; see §7** |
+| **B5** | Playwright E2E integrated into GitHub Actions on PR and push to main | **Resolved — verified green in CI on `main`** |
 
 | Secondary finding | Status |
 |---|---|
@@ -267,23 +267,38 @@ name, so the improvement is regression-tested.
 
 Stated plainly so the residual risk is owned rather than hidden:
 
-1. **GitHub Actions has not been observed executing.** No push was made, and
-   Actions cannot run locally. I validated the workflow YAML parses (7 jobs) and
-   executed each job's substantive commands locally: the pytest suites, the
-   OpenAPI drift check, the lock pin/hash audit, both Docker builds, the
-   in-image AI check, the prod compose validation, the frontend build and the
-   Playwright run. **The first real CI run should still be watched**, primarily
-   because the `ai-engine-tests` and `docker-build` jobs download the
-   `buffalo_l` pack from GitHub Releases on a cold cache.
-2. **The PostgreSQL + Redis CI job** was verified by proxy: the suite ran against
-   real PostgreSQL and Redis in the production compose stack, and the
-   shared-state tests ran against `fakeredis` locally. CI runs them against a
-   real Redis service container.
+> **Update — items 1 and 2 below have since been resolved.** Commit `7555352`
+> ("v1.1.0: close CTO review blockers B1–B5 and hardening follow-ups") was
+> pushed to `main` and CI run
+> [`30195679996`](https://github.com/sultanroot3-ux/SentinelAI/actions/runs/30195679996)
+> completed **successfully in 3m40s with all 7 jobs green**:
+>
+> | Job | Result | Duration |
+> |---|---|---|
+> | AI engine (insightface + ONNX Runtime) | success | 2m07s |
+> | Backend (pytest, PostgreSQL + Redis) | success | 1m24s |
+> | Backend (pytest, SQLite) | success | 1m05s |
+> | E2E (Playwright) | success | 1m22s |
+> | Docker images build | success | 3m36s |
+> | Dependency locks (pinned + hashed) | success | 20s |
+> | Frontend (build) | success | 17s |
+>
+> This means **B1, B2, B4 and B5 are now verified in CI on `main`**, not merely
+> locally: the AI job proved the real engine runs with `SENTINEL_REQUIRE_AI=1`,
+> the PostgreSQL + Redis job exercised the shared-state backend against a real
+> Redis service container, and the Docker job verified the AI engine inside the
+> built image. Items 3 and 4 below still stand.
+
+1. ~~**GitHub Actions has not been observed executing.**~~ **Resolved** — see the
+   update above. (Original note: the cold-cache `buffalo_l` download was the
+   main risk; the job completed in 2m07s.)
+2. ~~**The PostgreSQL + Redis CI job** was verified by proxy.~~ **Resolved** —
+   it ran against a real Redis service container in CI.
 3. **HTTPS / Let's Encrypt / certbot** paths in `docker-compose.prod.yml` were
    config-validated only. They need a real domain and cannot be exercised
-   locally.
+   locally. **Still outstanding.**
 4. **Load and soak testing** was not performed. Quota *correctness* is proven;
-   sustained-throughput capacity planning is not.
+   sustained-throughput capacity planning is not. **Still outstanding.**
 
 ---
 
@@ -295,8 +310,9 @@ Two operational conditions, neither blocking the deployment decision:
    It must be monitored. If Redis becomes unreachable the system degrades to
    per-worker limits — it stays up, but brute-force protection weakens, and that
    degradation is logged at ERROR and must be alerted on.
-2. **Watch the first CI run on `main`** for the cold-cache model download noted
-   in §7.1.
+2. ~~**Watch the first CI run on `main`**~~ — **satisfied.** Run `30195679996`
+   passed all 7 jobs on `main` in 3m40s, including the cold-cache model
+   download (2m07s). No action outstanding.
 
 ### Recommended next (not blocking)
 

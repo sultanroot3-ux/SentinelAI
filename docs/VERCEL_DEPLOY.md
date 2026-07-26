@@ -40,6 +40,13 @@ CSP stay at `connect-src 'self'`.
    sed -i '' 's|https://REPLACE-ME.example.com|https://YOUR-BACKEND-URL|g' vercel.json
    ```
 
+   **The Vercel build refuses to run until you do this.**
+   `scripts/check-backend-url.mjs` is wired into `buildCommand` and exits 1 while
+   the placeholder is present — otherwise the deploy would succeed and ship a UI
+   that loads a login form and then fails every API call, which reads as a
+   backend outage rather than a missing config line. The guard runs only on
+   Vercel; local `npm run build`, the Playwright suite and CI are unaffected.
+
 2. **Log in and link the project.** These are interactive — run them yourself:
 
    ```bash
