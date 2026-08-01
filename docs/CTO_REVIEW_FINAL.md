@@ -297,8 +297,8 @@ Stated plainly so the residual risk is owned rather than hidden:
 3. **HTTPS / Let's Encrypt / certbot** paths in `docker-compose.prod.yml` were
    config-validated only. They need a real domain and cannot be exercised
    locally. **Still outstanding.**
-4. **Load and soak testing** was not performed. Quota *correctness* is proven;
-   sustained-throughput capacity planning is not. **Still outstanding.**
+4. ~~**Load and soak testing** was not performed.~~ **Resolved** — see §10.3 and
+   [`PERFORMANCE.md`](PERFORMANCE.md) §1–§4.
 
 ---
 
@@ -316,13 +316,14 @@ Two operational conditions, neither blocking the deployment decision:
 
 ### Recommended next (not blocking)
 
-- The 2.23 GB backend image is dominated by ONNX Runtime and the model pack.
-  Worth revisiting if deploy time becomes a constraint.
-- `datetime.utcnow()` is deprecated and used throughout; migrate to
-  timezone-aware `datetime.now(timezone.utc)` before the Python version that
-  removes it.
+- ~~The 2.23 GB backend image is dominated by ONNX Runtime and the model
+  pack.~~ **Done** — now **1.65 GB**. See §10.1.
+- ~~`datetime.utcnow()` is deprecated and used throughout.~~ **Done** — see
+  §10.2. The suggested fix (aware datetimes everywhere) turned out not to be
+  applicable here; the reasoning is recorded because it is the kind of thing
+  that gets re-proposed.
 - Add automated accessibility assertions (e.g. `axe-core` in Playwright) so a11y
-  regressions are caught mechanically rather than by review.
+  regressions are caught mechanically rather than by review. **Still open.**
 
 ---
 
@@ -337,3 +338,135 @@ builds are reproducible; the AI endpoints cannot be trivially abused; and
 multi-worker deployments enforce the limits they advertise.
 
 **SentinelAI is approved for enterprise production deployment.**
+
+---
+
+## 10. Addendum — post-approval hardening (2026-08-01)
+
+Three of the four items left open at sign-off are now closed. Each was verified
+by execution, and each turned up something the original plan had not anticipated,
+recorded here so it is not re-derived later.
+
+### 10.1 Backend image: 2.23 GB → **1.65 GB**
+
+Two independent causes, both larger than expected.
+
+**192 MB of software OpenGL.** `insightface` hard-declares `opencv-python` — the
+GUI build — which links `libGL.so.1`. On Debian trixie `libgl1` *hard*-depends on
+`libglx-mesa0` → `mesa-libgallium` → `libllvm19`. A headless security appliance
+was shipping LLVM and a full software rasteriser to support a `highgui` module
+nothing calls; there is no `imshow`/`waitKey`/`namedWindow` anywhere in the tree.
+The build now installs the audited set, uninstalls the GUI build and reinstalls
+the same OpenCV version from `requirements-headless.txt` — sequentially, because
+both distributions own the same `cv2/` directory and resolving them together
+makes the winner depend on install order. The new lock is pinned and
+hash-verified like the others, so **B2 still holds**: nothing enters the image
+except from an audited lock. apt layer 229 MB → 17.9 MB.
+
+**145 MB of unused models.** buffalo_l ships five; the app reads three. Nothing
+touches `face.landmark_3d_68` (`1k3d68.onnx`, 144 MB) or `face.sex`/`face.age`
+(`genderage.onnx`). `FaceAnalysis` now names its modules explicitly. That matters
+beyond size: a bare `FaceAnalysis()` adapts to whatever `.onnx` files it finds,
+so without the explicit list a code path using `face.sex` would work on a
+developer machine with the full pack and fail *only* in production. Model layer
+341 MB → 196 MB.
+
+The prune is asserted in both directions. A silent no-op is the dangerous
+outcome: if a future pack renamed `w600k_r50.onnx`, an `rm -f` of the unused
+names would still succeed, the build would go green, and the missing recognition
+model would surface as "nothing ever matches" — read in production as a
+threshold-tuning problem, not a broken build.
+
+*Not done:* the venv is still 811 MB and is now the bulk of the image
+(`onnx`, `sympy`, `scipy`, `onnxruntime`). Trimming it means deleting from
+`site-packages` after install, which breaks the B2 property that image contents
+match the audited lock. Not worth that trade.
+
+### 10.2 `datetime.utcnow()` — migrated, but not the way §8 suggested
+
+All 28 call sites across 10 files now go through `app/core/clock.py`.
+
+The recommendation was "migrate to timezone-aware `datetime.now(timezone.utc)`".
+**That is not applicable here, and the reason should be recorded because it will
+be proposed again.** SQLite backs local development, the pytest suite and the
+Playwright E2E run, and SQLite has no timestamp type: SQLAlchemy formats the
+value into a string and **drops `tzinfo` even when the column declares
+`timezone=True`** — verified empirically. Reads come back naive regardless. Code
+comparing `row.created_at` against an aware `now()` would pass on PostgreSQL and
+raise `TypeError` on SQLite: a bug class visible on only one backend.
+
+The convention is therefore the one `create_refresh_token()` already followed by
+hand (`expire.replace(tzinfo=None)` before the insert), now explicit and applied
+everywhere — **aware at the edges, naive UTC in the database**: `utcnow()` for
+columns, `now_utc()` for JWT `exp` and other offset-aware boundaries,
+`to_naive_utc()` as the one-way door (which *converts* rather than strips, so a
+non-UTC input is shifted instead of silently recording the wrong instant).
+
+Output formats are unchanged on purpose; adding a `+00:00` offset to
+`generated_at` would have been a silent change to the published API contract for
+no correctness gain. A CI guard fails the build on any reintroduction, and was
+confirmed non-vacuous by planting a call.
+
+### 10.3 Load and soak testing — done; full results in `PERFORMANCE.md`
+
+`scripts/loadtest.py` measures per-request cost, ramps concurrency, soaks, and
+exercises both limiters under simultaneous load. Run against the production
+compose stack (PostgreSQL + Redis + backend at 2 workers). **All limiter
+assertions passed.** Three findings worth surfacing here:
+
+1. **Cost is per *face*, not per frame:** ≈ 460 ms detection + ≈ 800 ms per face.
+   Sizing on an average face count rather than the worst case will
+   under-provision a reception area badly.
+
+2. **Throughput is flat from concurrency 1 to 8** while latency grows linearly —
+   the service is fully CPU-bound, because ONNX Runtime already parallelises a
+   single inference across every core. **This inverts the guidance in §5 of
+   `PERFORMANCE.md` v1.0 and the deployment checklist:** raising
+   `UVICORN_WORKERS` does *not* raise recognition throughput. It multiplies
+   memory (≈ 1.25 GiB per worker) and adds queueing. Scale workers with *MJPEG
+   stream count*; scale *cores* for recognition throughput.
+
+3. **The login limiter's first burst is bounded by attacker concurrency, not by
+   `MAX_FAILURES`.** 10 simultaneous wrong passwords all reached the password
+   check; the next 5 were all blocked. `check_allowed()` runs before bcrypt and
+   `record_failure()` after, so the window is atomic but the check-then-act
+   interval is not. Deliberately not changed — counting attempts before verifying
+   would let any unauthenticated party lock any account out, which is a worse
+   failure for a security product. Documented as an accepted trade-off.
+
+Soak was clean: 5 minutes at saturation, p95 *fell* (46.4 s → 27.7 s), RSS flat
+within 1.8% across 12 samples, no 5xx and no dropped connections.
+
+### 10.4 A defect this work uncovered: the image AI check never ran
+
+§2 claimed "the `docker-build` CI job runs the engine check **inside the built
+image**, so a production container cannot quietly degrade to Haar." **That claim
+was not backed by the check as written.**
+
+```
+docker run --rm --entrypoint python sentinelai-backend:ci - <<'PY'
+```
+
+Without `-i`, Docker does not attach stdin. `python -` read EOF, executed
+nothing and exited 0, so the step passed unconditionally from the day it was
+added — including in run `30195679996`, which §7 cites as evidence. Confirmed by
+planting a `SystemExit` in the heredoc and watching the step still exit 0.
+
+Fixed with `-i`, and hardened so the failure mode cannot recur silently: the
+script prints a sentinel and the step greps for it, so a check that does not run
+fails the build instead of passing. It now also runs real inference on a real
+photo under `--network none` — 6 faces, 512-d normalised embedding — rather than
+only initialising sessions, and a companion step asserts `libgl1`, `libllvm19`,
+`mesa-libgallium` and the two pruned models are absent from the image.
+
+The B1 claim is now true. It was verified by hand on the built image while
+closing §10.1; CI will verify it on the next run.
+
+### 10.5 Still open
+
+- **HTTPS / Let's Encrypt / certbot** (§7.3) — needs a real domain.
+- **Automated accessibility assertions** (`axe-core` in Playwright) — §8.
+- Absolute throughput figures in `PERFORMANCE.md` come from a 2017 dual-core
+  laptop. The cost model and saturation shape transfer; the req/s numbers do
+  not. Re-run `scripts/loadtest.py` on the target hardware before committing to
+  a camera count.

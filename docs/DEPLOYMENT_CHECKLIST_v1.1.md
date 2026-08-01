@@ -41,8 +41,13 @@ persistent disk, long-lived MJPEG connections.
       IP for every request; leaving this unset means every user in the world
       shares a single login rate-limit bucket.** This is the single easiest way
       to silently defeat B3/B4 in the new topology.
-- [ ] `UVICORN_WORKERS` — scale with camera count (each MJPEG stream holds a
-      worker thread).
+- [ ] `UVICORN_WORKERS` — scale with **concurrent MJPEG stream count** (each
+      stream holds a worker thread), **not** with expected recognition load.
+      Load testing showed recognition throughput is flat from concurrency 1 to
+      8: ONNX Runtime already uses every core for a single inference, so extra
+      workers add queueing and ~1.25 GiB of RSS each without doing more work.
+      For recognition throughput, add **cores** or a GPU `onnxruntime` build.
+      See [`PERFORMANCE.md`](PERFORMANCE.md) §2–§3.
 
 ### Post-boot verification
 
@@ -113,15 +118,36 @@ persistent disk, long-lived MJPEG connections.
 
 ## 4. Known gaps carried into production
 
-From `CTO_REVIEW_FINAL.md` §7 — accepted, not blocking:
+From `CTO_REVIEW_FINAL.md` §7 and §10 — accepted, not blocking:
 
 - [ ] **HTTPS / Let's Encrypt / certbot renewal** was config-validated only.
-      Verify the certificate issues and renews on the real domain.
-- [ ] **No load or soak testing.** Quota *correctness* is proven; sustained
-      throughput is not. Do a capacity test before onboarding many cameras.
-- [ ] `datetime.utcnow()` is deprecated across the codebase — schedule migration.
-- [ ] Backend image is 2.23 GB (ONNX Runtime + model pack) — revisit if deploy
-      time becomes a constraint.
+      Verify the certificate issues and renews on the real domain. **Still open.**
+- [x] ~~**No load or soak testing.**~~ Done — `scripts/loadtest.py`, results in
+      [`PERFORMANCE.md`](PERFORMANCE.md) §1–§4. **But the published figures come
+      from a 2017 dual-core laptop.** Re-run on the target hardware before
+      committing to a camera count:
+      ```bash
+      python scripts/loadtest.py --base-url https://<backend> --all
+      ```
+      Budget from §1: `≈ 460 ms + 800 ms × faces_per_frame` on that test bed,
+      scaled by your CPU. Size on the *busiest* camera, not the average.
+- [x] ~~`datetime.utcnow()` deprecated.~~ Migrated to `app/core/clock.py`, with
+      a CI guard against reintroduction.
+- [x] ~~Backend image is 2.23 GB.~~ Now **1.65 GB** (headless OpenCV, unused
+      models dropped). Re-pull rather than reusing a cached tag — see below.
+- [ ] **Accessibility assertions are still manual** — no `axe-core` in the E2E
+      suite yet.
+
+> ⚠️ **If you have deployed this stack before, force a rebuild.** `docker
+> compose up` will happily reuse a stale local `sentinelai-backend` image. That
+> bit us during load testing: the stack came up healthy and served traffic while
+> running a *pre-v1.1.0* image with no `shared_state.py` in it — so none of B4
+> was actually in effect, and nothing in the health check or the logs said so.
+> ```bash
+> docker compose build backend && docker compose up -d --force-recreate backend
+> docker compose logs backend | grep "Shared state backend"   # must say: redis (workers=N)
+> ```
+> The absence of that log line is the tell. Treat it as a failed deploy.
 
 ---
 
