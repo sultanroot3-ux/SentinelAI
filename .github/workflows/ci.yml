@@ -289,7 +289,7 @@ jobs:
       - uses: docker/setup-buildx-action@v3
 
       - name: Build backend image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: docker/backend.Dockerfile
@@ -387,7 +387,7 @@ jobs:
           echo "OK: no GUI OpenGL stack, no unused models"
 
       - name: Build frontend image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: docker/frontend.Dockerfile
