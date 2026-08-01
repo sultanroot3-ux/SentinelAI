@@ -33,7 +33,7 @@ actually executed; §7 lists what could *not* be verified locally and why.
 
 | Suite | Result |
 |---|---|
-| Backend (`pytest`, SQLite + real InsightFace) | **259 passed**, 0 failed, 0 skipped, 99s |
+| Backend (`pytest`, SQLite + real InsightFace) | **259 passed** at sign-off, 0 failed, 0 skipped, 99s (**271 as of v1.1.0** — §10) |
 | Playwright E2E (Chromium, production build) | **14 passed**, 1.2m |
 | Frontend production build | Clean, 359 kB JS / 101 kB gzip |
 | Backend production image | Built (2.23 GB at sign-off; **1.65 GB since** — §10.1); AI engine loads and infers **offline** inside the container |
@@ -77,7 +77,8 @@ matching or thresholding would have shipped undetected.
 
 **Verified.** Locally, `insightface_available()` returns `True` and the full
 suite of 259 tests — including the AI pipeline — passes with the real engine.
-Inside the production image:
+(As of v1.1.0 that suite is 271 tests, and the same assertion now runs in CI on
+the released commit — see §10.4.) Inside the production image:
 
 ```
 AI ENGINE OK: insightface + onnxruntime, buffalo_l loaded offline

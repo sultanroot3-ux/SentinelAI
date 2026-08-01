@@ -3,6 +3,57 @@
 All notable changes to SentinelAI are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: [SemVer](https://semver.org/).
 
+## [1.1.0] — 2026-08-02
+
+Closes the five blockers from the CTO production-readiness review (B1–B5), plus
+the hardening and audit follow-ups. First release verified end to end by a green
+CI run on the released commit.
+
+### Added
+- **Real AI engine in CI.** A dedicated job installs insightface + ONNX Runtime
+  and runs the recognition pipeline with `SENTINEL_REQUIRE_AI=1`, so a missing
+  engine fails the build instead of silently skipping (B1)
+- **Redis-backed shared state** for login rate limiting, endpoint quotas and
+  pipeline cooldowns, each a single atomic Lua script. The app refuses to start
+  in production with `UVICORN_WORKERS > 1` and no `SENTINEL_REDIS_URL` (B4)
+- **Per-user quotas on the expensive AI endpoints**, returning `429` with
+  `Retry-After` and auditing breaches (B3)
+- **Playwright E2E in CI** on every PR and push to `main`, against the
+  production frontend bundle (B5)
+- `app/core/clock.py` — explicit time helpers replacing deprecated
+  `datetime.utcnow()`, with a CI guard against reintroduction
+- `scripts/loadtest.py` — capacity, soak and limiter load-test harness
+- `backend/requirements-headless.txt` — pinned, hash-verified headless OpenCV
+- `PROJECT_STATUS.md`, `docs/PERFORMANCE.md` (§1–§4), `docs/CTO_REVIEW_FINAL.md`
+
+### Changed
+- **Backend image 2.23 GB → 1.65 GB.** Dropped the GUI OpenCV build (which
+  dragged in Mesa + LLVM: 192 MB of software OpenGL for a `highgui` module
+  nothing calls) and the two buffalo_l models the app never reads (145 MB)
+- `FaceAnalysis` now names its modules explicitly, so development and
+  production load the same three models
+- Deterministic, hash-verified dependency locks across four files (B2)
+- `recognition_accuracy` renamed to `match_rate` in the published contract
+- Worker-scaling guidance corrected: more `UVICORN_WORKERS` does **not**
+  increase recognition throughput (measured flat from concurrency 1→8)
+
+### Fixed
+- **The CI check meant to prove the AI engine works inside the shipped image
+  never ran.** `docker run … python -` without `-i` gets EOF and exits 0, so it
+  passed unconditionally. Fixed, and hardened with a sentinel so it cannot go
+  vacuous again
+- `GET /api/users` no longer discloses `must_change_password` for other
+  accounts — it told any authenticated user which admins were still on a
+  default password
+- Credential leaks in Telegram/Discord/SMTP failure logs (the bot token and
+  webhook URL live in the exception text `requests` raises)
+- `GET /api/reports/visitors` capped at 50,000 rows; refuses oversized exports
+  with `413` rather than silently truncating
+- Horizontal overflow at 375px on the dashboard and live-camera pages
+- 13 icon-only buttons given subject-bearing `aria-label`s
+- Flaky Redis token-bucket tests, and the suite is now idempotent against a
+  persistent PostgreSQL database
+
 ## [1.0.4] — 2026-07-24
 
 Fixes from a final pre-freeze codebase audit (backend + frontend). No new features.

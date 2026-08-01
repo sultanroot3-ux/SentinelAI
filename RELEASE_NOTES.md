@@ -1,180 +1,118 @@
-# SentinelAI v1.0.4 — Release Notes
+# SentinelAI v1.1.0 — Release Notes
 
-**Release date:** 2026-07-24
+**Release date:** 2026-08-02
 
-v1.0.4 is a hardening release: fixes from a final, from-scratch audit of the
-whole codebase (backend + frontend) before freezing. No new features.
+v1.1.0 closes the five blockers raised by the CTO production-readiness review
+(B1–B5) plus the hardening and audit follow-ups. It is the first release whose
+released commit was verified end to end by a green CI run.
 
-## Security & correctness fixes
-
-- **Login timing side channel** closed — an unknown username now takes the same
-  time as a real one (always runs bcrypt), so the generic error can't be
-  bypassed to enumerate accounts.
-- **Upload DoS** closed — all image uploads are capped at 10 MB and rejected
-  before being read into memory.
-- **Two authorization gaps** closed — `GET /api/settings` (channel config) and
-  `GET /api/reports/visitors` (full log export) were readable by any
-  authenticated user; now restricted to admin/it and admin/security_officer
-  respectively, with matching nav gating.
-- **Audit coverage** completed — deleting biometric evidence (unknown-face
-  records) and permission denials are now logged.
-- **Missing DB index** on `recognition_logs.user_id` added (highest-volume
-  table; every investigation report queried it with a full scan).
-- **Input validation** — request schemas enforce `max_length` matching the DB,
-  turning would-be PostgreSQL 500s into clean 422s.
-- **Thread-safety** — the AI model singleton and embedding cache are now locked
-  against the request threadpool.
-- **Image/build hygiene** — added `.dockerignore`; the backend image dropped
-  the host's ~700 MB dev virtualenv it had been baking in.
-- **Dead code** removed; the unread-notification badge no longer under-counts.
-
-Verified: 141 backend tests, frontend build, full production Docker stack, CI.
+Full detail in [`CHANGELOG.md`](CHANGELOG.md); review evidence in
+[`docs/CTO_REVIEW_FINAL.md`](docs/CTO_REVIEW_FINAL.md); current state and
+remaining manual steps in [`PROJECT_STATUS.md`](PROJECT_STATUS.md).
 
 ---
-
-# SentinelAI v1.0.3 — Release Notes
-
-**Release date:** 2026-07-24
-
-v1.0.3 completes the HIGH-priority production requirements from the engineering
-review (H1–H4). No new product features.
-
-## Enterprise-readiness hardening
-
-- **H1 — Biometric data retention.** New `unknown_retention_days` setting
-  (Settings → Data Retention; default 0 = disabled). A background job purges
-  unknown-person records — snapshot, embedding, and DB row — older than the
-  window; records linked to a case or on a watchlist are never purged; every
-  purge is written to the audit log. Documented in `docs/DATA_RETENTION.md`.
-  Verified by 7 backend tests + in-browser settings check.
-- **H2 — Log-safe MJPEG authentication.** The live stream no longer accepts
-  the 30-minute API access token in its URL. The dashboard fetches a
-  single-purpose **60-second stream token** (`POST /api/camera/stream-token`);
-  access tokens are rejected on the stream, stream tokens are rejected on the
-  API. nginx additionally logs request paths without query strings. Verified
-  live: access token → 401, stream token → accepted, **zero `token=` in nginx
-  logs**; plus 6 backend tests.
-- **H3 — Complete media backups.** The daily backup service now produces a
-  matched pair — database dump **and** a media tarball (enrollment photos +
-  evidence snapshots). Verified end to end with a clean-environment restore
-  (DB + media into fresh volumes) and a cross-integrity check that a restored
-  `photo_url` resolves to a restored file.
-- **H4 — Offsite backups.** Optional `offsite` compose profile replicates
-  `./backups` to any rclone-supported target (S3, SCP/SFTP, B2, GCS, Azure…)
-  and **verifies every transfer** with `rclone check`. Verified: sync loop
-  reported `0 differences, 4 matching files`. See `docs/BACKUP_RESTORE.md`.
-
-Upgrade: `git pull && docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build`.
-
----
-
-# SentinelAI v1.0.2 — Release Notes
-
-**Release date:** 2026-07-23
-
-v1.0.2 resolves the four production blockers identified in the final
-engineering review (C1–C4). No new features.
-
-## Production fixes
-
-- **C1 — Migrations own the production schema.** The container entrypoint now
-  runs `alembic upgrade head` before starting the app and refuses to start if
-  it fails; `create_all` is development-only. Existing v1.0.1 databases
-  (schema built by `create_all`, no `alembic_version`) are detected and
-  adopted automatically. Verified: fresh install (×3), upgrade from a real
-  v1.0.1 database with data preserved, rollback + re-upgrade, and fail-fast
-  on an unreachable database.
-- **C2 — TLS certificates hot-reload on renewal.** A watcher inside the nginx
-  container detects certificate changes on the certbot volume and reloads
-  nginx with zero downtime. Verified by simulated renewal: reload logged, new
-  certificate served, 40/40 requests succeeded during the swap.
-- **C3 — Embedding cache is multi-worker consistent.** Every lookup checks a
-  cheap DB version signature (count + max id of `face_embeddings`); workers
-  that did not handle an enrollment rebuild automatically. Verified live with
-  two production workers: enroll → 12/12 immediate recognitions, no restart.
-- **C4 — AI engine and model ship in the image.** insightface + onnxruntime
-  are now installed in the production image (previously it silently fell back
-  to detection-only), with the buffalo_l model pack baked in and pinned by
-  SHA-256. Verified: container starts and runs inference with networking
-  disabled (`--network none`).
-- Also fixed: multi-worker seed race at first startup (worker crash on
-  duplicate-key) — now retried with jittered backoff; verified across three
-  cold starts.
-
-Upgrade: `git pull && docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build`
-(the entrypoint migrates automatically).
-
----
-
-# SentinelAI v1.0.1 — previous release
-
-SentinelAI is an intelligent vision security platform: real-time face
-recognition on live camera streams, enterprise investigation tooling, and a
-full operations dashboard — self-hosted, with all data in your own
-PostgreSQL database. No external or third-party data sources are ever used.
 
 ## Highlights
 
-### Recognition engine
-- InsightFace (ArcFace `buffalo_l`) 512-d embeddings, in-memory vectorized
-  matching, OpenCV fallback
-- Temporal liveness (blink + non-rigid motion + head-pose micro-movement)
-  on live streams; single-frame method honestly labelled on uploads
-- Live MJPEG streaming with server-side AI overlays (green/red/amber)
+**The recognition pipeline is now actually tested.** CI previously ran against
+the OpenCV Haar-cascade fallback — insightface was never installed, so the
+product's core function was untested. A dedicated job now installs the real
+engine and runs the pipeline with `SENTINEL_REQUIRE_AI=1`, asserting accuracy in
+both error directions: every identity must re-match itself above 0.95 after a
+JPEG round-trip, and no cross-identity pair may reach the 0.45 threshold (B1).
 
-### Enterprise Investigation System
-- Full investigation reports: employee profile (database-only identity),
-  camera + location, detection history, watchlist hits, snapshot
-- Unknown-person pipeline: stable `UNK-xxxxxx` IDs, stored embeddings,
-  similar-sighting linkage by cosine similarity
-- AI attribute estimates — age, gender, head pose, face quality, blur,
-  brightness, mask/glasses heuristics — every value labelled an estimate;
-  attributes without a local model report `unavailable`, never guessed
-- Watchlists (employees or unknowns) with alert levels; visitor management
-  with check-in/out; access history timeline; RBAC catalogue; audit trail
+**Rate limits are enforced across workers.** Login limiting and pipeline
+cooldowns were module-level dicts while the shipped compose file runs two
+workers, so the effective login limit was `5 × worker_count` and the "one alert
+per 10 s" cooldown fired once per worker. Both were live defects in the shipped
+configuration. State now lives in Redis behind atomic Lua scripts, and the app
+refuses to start in production with `UVICORN_WORKERS > 1` and no
+`SENTINEL_REDIS_URL` (B4).
 
-### Dashboard
-- 21 pages, React + Vite: live camera, investigation, visitors, watchlists,
-  cameras & locations, roles & permissions matrix, audit log viewer, access
-  history, analytics, reports (CSV/JSON/PDF/Excel), notifications, settings
-- Role-gated navigation, dark/light themes, mobile responsive
+**The AI endpoints can no longer be trivially abused.** `/api/recognition/frame`
+accepts a 10 MB upload and runs a full model inference per call; any
+authenticated account could saturate the worker pool. Per-user token buckets now
+guard the AI endpoints and return `429` with `Retry-After` (B3).
 
-### Security
-- JWT access (30 min) + single-use rotating refresh tokens with server-side
-  revocation; forced password change for seeded accounts
-- Login rate limiting; RBAC enforced on every endpoint; full audit logging
-- Biometric media served only via short-lived signed URLs
-- TLS with HSTS, CSP, X-Frame-Options, nosniff, Referrer-Policy,
-  Permissions-Policy
+**The backend image is 26% smaller — 2.23 GB → 1.65 GB.** The GUI OpenCV build
+was dragging in Mesa and LLVM (192 MB of software OpenGL, for a `highgui` module
+nothing calls), and the image shipped two buffalo_l models the application never
+reads (145 MB).
 
-### Production operations
-- One-command Ubuntu deployment (`deployment/install_ubuntu.sh`): Docker
-  stack with PostgreSQL 16, non-root backend image, nginx TLS termination,
-  Let's Encrypt with auto-renewal, daily gzip backups with retention,
-  container healthchecks, log rotation
-- Health monitoring script for cron; performance-tested (see
-  `docs/PERFORMANCE.md`)
-- CI: pytest against SQLite + PostgreSQL, frontend build, Docker image
-  builds, production compose validation
+**Builds are reproducible.** Four `pip-compile` lock files, 91 requirements, all
+pinned and hash-verified, with CI guards against drift (B2).
 
-## Quality
-- **123 backend tests** (unit + integration), run in CI on SQLite and
-  PostgreSQL
-- Playwright E2E: all 20 authenticated pages + interaction flows verified
-- Zero-trust verification pass over every feature (see
-  `docs/COMPLETE_FINAL_REPORT.md`)
+---
+
+## Security fixes
+
+- `GET /api/users` no longer discloses `must_change_password` for other
+  accounts. The directory is readable by every authenticated role by design, so
+  the flag told the lowest-privileged user which admin accounts were still on a
+  seeded or freshly-reset password — a target list.
+- Credential leaks closed in notification failure logs. `requests` embeds the
+  request URL in the exception it raises, and the Telegram bot token lives in
+  that URL's path — so a bare `logger.exception(...)` published the token even
+  though the call site never logged it. Same hazard for Discord webhooks; SMTP
+  passwords are scrubbed too.
+- `GET /api/reports/visitors` is capped at 50,000 rows and refuses oversized
+  exports with `413` rather than silently truncating — a report that looks
+  complete and is not is worse than no report.
+
+## Also fixed
+
+- **A CI check that never ran.** The step meant to prove the AI engine works
+  inside the shipped image used `docker run … python -` without `-i`, so the
+  interpreter read EOF, executed nothing and exited 0 — it had been passing
+  unconditionally since it was added. Fixed, and hardened with a sentinel the
+  step greps for, so it cannot go vacuous again.
+- Deprecated `datetime.utcnow()` replaced throughout by `app/core/clock.py`,
+  with a CI guard against reintroduction.
+- Horizontal overflow at 375 px on the dashboard and live-camera pages.
+- 13 icon-only buttons given accessible names that include the row subject
+  ("Delete Jane Okafor", not a column of identical "Delete" buttons).
+- Flaky Redis token-bucket tests; the suite is now idempotent against a
+  persistent PostgreSQL database.
+
+## Verification
+
+- **271 backend tests** — green in CI on SQLite and on PostgreSQL + Redis
+- **14 Playwright E2E tests** against the production frontend bundle
+- **All 7 CI jobs green** on the released commit, in 3m49s
+- Production image verified to load the AI engine and infer **offline**
+- 20 authenticated pages swept in a real browser (zero console errors, zero
+  failed requests); all 32 GET endpoints probed live with zero 5xx
 
 ## Known limitations
-- Emotion estimation, object detection and OCR report `unavailable` (no
-  local models bundled); mask/glasses are low-confidence heuristics
-- Camera Locations API supports create/list only (no rename/delete)
-- AI-overlay streaming is CPU-bound at roughly 1 fps/camera on commodity
-  hardware; scale workers/hardware with camera count
-- Login rate limiting is tracked in-memory per worker process: with
-  `UVICORN_WORKERS=N` the effective limit is 5×N failed attempts per
-  15 minutes (verified against the production stack). A shared store
-  (Redis) would tighten this; acceptable for the default N=2
 
-## Upgrade / install
-See `deployment/DEPLOYMENT.md` (single-command install) and
-`docs/DEPLOYMENT_CHECKLIST.md` (go-live checklist).
+- **Not yet validated with real camera hardware or a real HTTPS domain.** This
+  release is **approved for pilot**, not general production — `PROJECT_STATUS.md`
+  lists the exact remaining steps.
+- Emotion estimation, object detection and OCR report `unavailable` (no local
+  models bundled); mask/glasses are low-confidence heuristics.
+- Camera Locations API supports create/list only (no rename/delete).
+- AI-overlay streaming is CPU-bound. Recognition throughput is flat as worker
+  count rises — scale `UVICORN_WORKERS` with concurrent stream count, and add
+  CPU cores (or a GPU `onnxruntime` build) for throughput.
+- Biometric retention defaults to `0` (disabled — records kept indefinitely).
+  Set `unknown_retention_days` for your jurisdiction.
+- `react-router-dom` carries advisory GHSA-qwww-vcr4-c8h2. Not exploitable here
+  (RSC-mode only; this app has no router actions and no server runtime) but it
+  will appear in dependency scans.
+
+## Upgrade
+
+Redis is now a **hard production dependency** whenever `UVICORN_WORKERS > 1`.
+
+```bash
+docker compose build backend && docker compose up -d --force-recreate backend
+docker compose logs backend | grep "Shared state backend"   # must say: redis (workers=N)
+```
+
+`docker compose up` will reuse a stale local image — force the rebuild. The
+absence of that log line means shared state is not in effect; treat it as a
+failed deploy.
+
+See [`docs/DEPLOYMENT_CHECKLIST_v1.1.md`](docs/DEPLOYMENT_CHECKLIST_v1.1.md) for
+the go-live checklist and [`deployment/DEPLOYMENT.md`](deployment/DEPLOYMENT.md)
+for a fresh install.

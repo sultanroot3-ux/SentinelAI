@@ -484,6 +484,43 @@ jobs:
       # Dependabot bump to one and not the other would ship an image whose
       # OpenCV is a different version from the audited one, and no other check
       # would notice.
+      # Before v1.1.0 there were three different answers to "what version is
+      # this?": docs/openapi.json advertised FastAPI's default 0.1.0,
+      # frontend/package.json said 1.0.0, and the tags said v1.0.4. Nothing
+      # caught it because nothing compared them.
+      - name: Verify the version is consistent everywhere
+        run: |
+          python - <<'PY'
+          import json, re, sys
+
+          api = json.load(open("docs/openapi.json"))["info"]["version"]
+          web = json.load(open("frontend/package.json"))["version"]
+          cfg = re.search(
+              r'APP_VERSION:\s*str\s*=\s*"([^"]+)"',
+              open("backend/app/core/config.py").read(),
+          )
+          log = re.search(r"^## \[([0-9]+\.[0-9]+\.[0-9]+)\]", open("CHANGELOG.md").read(), re.M)
+          notes = re.search(r"^# SentinelAI v([0-9]+\.[0-9]+\.[0-9]+)", open("RELEASE_NOTES.md").read(), re.M)
+
+          if not cfg:   sys.exit("could not read APP_VERSION from config.py")
+          if not log:   sys.exit("could not read the top version heading from CHANGELOG.md")
+          if not notes: sys.exit("could not read the version from RELEASE_NOTES.md")
+
+          found = {
+              "backend APP_VERSION": cfg.group(1),
+              "docs/openapi.json":   api,
+              "frontend/package.json": web,
+              "CHANGELOG.md (top)":  log.group(1),
+              "RELEASE_NOTES.md":    notes.group(1),
+          }
+          for k, v in found.items():
+              print(f"  {k:24} {v}")
+          if len(set(found.values())) != 1:
+              print("::error::version mismatch across the repository")
+              sys.exit(1)
+          print(f"OK: every source agrees on {cfg.group(1)}")
+          PY
+
       - name: Verify the two OpenCV builds are the same version
         working-directory: backend
         run: |

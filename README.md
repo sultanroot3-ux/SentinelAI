@@ -101,14 +101,27 @@ Live Camera → Frame Capture → Face Detection → Quality Check → Liveness
 
 ## 📖 Documentation
 
-- [API Contract](docs/API_CONTRACT.md) — every endpoint, payload and model
-- [Installation](docs/INSTALL.md) · [Testing](docs/TESTING.md) · [Deployment](deployment/DEPLOYMENT.md)
-- [Changelog](CHANGELOG.md) · [Contributing](CONTRIBUTING.md) · [Security Policy](SECURITY.md) · [Code of Conduct](CODE_OF_CONDUCT.md)
+**Start here:** [Project Status](PROJECT_STATUS.md) — current version, what is
+verified, and what still needs manual validation before general production.
+
+- **Using it:** [User Manual](docs/USER_MANUAL.md) · [Admin Manual](docs/ADMIN_MANUAL.md)
+- **Building on it:** [API Contract](docs/API_CONTRACT.md) — every endpoint, payload and model · [Architecture](docs/ARCHITECTURE.md) · [Testing](docs/TESTING.md)
+- **Running it:** [Installation](docs/INSTALL.md) · [Deployment](deployment/DEPLOYMENT.md) · [Go-live checklist (v1.1)](docs/DEPLOYMENT_CHECKLIST_v1.1.md) · [Vercel frontend](docs/VERCEL_DEPLOY.md)
+- **Operating it:** [Performance & load](docs/PERFORMANCE.md) · [Backup & restore](docs/BACKUP_RESTORE.md) · [Data retention](docs/DATA_RETENTION.md)
+- **Assurance:** [CTO production-readiness review](docs/CTO_REVIEW_FINAL.md)
+- **Project:** [Changelog](CHANGELOG.md) · [Release notes](RELEASE_NOTES.md) · [Contributing](CONTRIBUTING.md) · [Security Policy](SECURITY.md) · [Code of Conduct](CODE_OF_CONDUCT.md)
 
 ## 🔥 Roadmap
 
-Voice recognition · Object detection · License plate recognition · QR / RFID ·
-Multi-camera support · Cloud sync · Mobile app · AI assistant
+**v1.1.x (next):** real-camera and HTTPS pilot validation · `axe-core`
+accessibility assertions in CI · finite default for biometric retention ·
+multi-camera support · GPU `onnxruntime` build
+
+**Later:** object detection · license plate recognition · QR / RFID ·
+voice recognition · cloud sync · mobile app · AI assistant
+
+See [PROJECT_STATUS.md](PROJECT_STATUS.md) for what is verified today and what
+is not.
 
 ## ⚖️ Responsible Use
 

@@ -35,6 +35,13 @@ class Settings(BaseSettings):
     )
 
     APP_NAME: str = "SentinelAI - Intelligent Vision Security Platform"
+    # Single source of truth for the release version. It reaches the published
+    # API contract via FastAPI(version=...) -> docs/openapi.json, and CI asserts
+    # it matches frontend/package.json and the top CHANGELOG entry. Before this
+    # existed the contract advertised FastAPI's default "0.1.0" while the
+    # frontend claimed "1.0.0" and the tags said v1.0.4 — three different
+    # answers to "what version is this?".
+    APP_VERSION: str = "1.1.0"
     # "development" (default) or "production". Production refuses to start
     # with the built-in dev secret — see validate_for_environment().
     ENV: str = "development"

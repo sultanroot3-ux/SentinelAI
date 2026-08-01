@@ -13,10 +13,13 @@ those. Rationale for every item here is in
 
 Recorded so you can confirm you are deploying the audited build, not re-run it.
 
-- [x] Commit `7555352` on `main` ("v1.1.0: close CTO review blockers B1–B5")
-- [x] CI run `30195679996` — **all 7 jobs green in 3m40s**
-- [x] Backend suite 259 passed · Playwright 14 passed · locks 89/89 pinned+hashed
-- [x] Production image verified to load the AI engine **offline** inside the container
+- [x] Release **v1.1.0**, commit `81e381d` on `main`
+- [x] CI run [`30714812120`](https://github.com/sultanroot3-ux/SentinelAI/actions/runs/30714812120)
+      — **all 7 jobs green in 3m49s on the released commit**
+- [x] Backend suite 271 passed · Playwright 14 passed · locks 91/91 pinned+hashed
+- [x] Production image (1.65 GB) verified to load the AI engine **offline** inside
+      the container — CI log shows `ENGINE_CHECK_PASSED` with real inference
+      (6 faces, 512-d normalised embedding) under `--network none`
 
 If you are deploying a later commit, re-confirm CI is green for *that* commit.
 

@@ -161,7 +161,9 @@ async def lifespan(app: FastAPI):
     retention_task.cancel()
 
 
-app = FastAPI(title=settings.APP_NAME, lifespan=lifespan)
+app = FastAPI(
+    title=settings.APP_NAME, version=settings.APP_VERSION, lifespan=lifespan
+)
 
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
