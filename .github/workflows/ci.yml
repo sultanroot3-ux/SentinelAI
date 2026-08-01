@@ -301,16 +301,90 @@ jobs:
 
       # Proves the shipped image contains the real engine, so a production
       # container can never quietly fall back to Haar-cascade detection (B1).
+      #
+      # Also guards the slimming work: the image ships headless OpenCV and only
+      # three of buffalo_l's five models. Loading the engine is not enough to
+      # prove that — a missing recognition model surfaces as "nothing ever
+      # matches", which looks like a tuning problem in production rather than a
+      # broken build. So this runs a real inference and checks the embedding.
       - name: Verify the AI engine inside the built image
         run: |
-          docker run --rm --entrypoint python sentinelai-backend:ci - <<'PY'
+          # -i is load-bearing. Without it docker does not attach stdin, so
+          # `python -` reads EOF, executes nothing and exits 0 — the step passes
+          # no matter what the image contains. This check was silently vacuous
+          # until 2026-08-01; the `--network none` below is what proves offline.
+          set -o pipefail
+          docker run --rm -i --network none --entrypoint python sentinelai-backend:ci - <<'PY' | tee /tmp/engine-check.log
+          import pathlib
+
+          import cv2
+          import insightface
+          import numpy as np
+
           from app.services import face_service
+
           assert face_service.insightface_available(), (
               "the production image does not have a working AI engine"
           )
-          face_service._get_insightface_app()
-          print("Production image AI engine OK (buffalo_l loaded offline)")
+
+          # Importing cv2 at all is the headless proof: the image has no libgl1,
+          # so a GUI build would fail here with "libGL.so.1: cannot open shared
+          # object file". (hasattr(cv2, "imshow") is not a test — the headless
+          # wheel still exports it and only raises when called.)
+          print("cv2", cv2.__version__, "imported without libGL")
+
+          app = face_service._get_insightface_app()
+
+          loaded = sorted(app.models)
+          expected = sorted(face_service.INSIGHTFACE_MODULES)
+          assert loaded == expected, f"loaded modules {loaded} != expected {expected}"
+
+          # Real inference on a real photo. Session init alone would still pass
+          # with a truncated or wrong recognition model.
+          blank = app.get(np.zeros((640, 640, 3), dtype=np.uint8))
+          assert blank == [], f"expected 0 faces on a blank frame, got {len(blank)}"
+
+          sample = pathlib.Path(insightface.__file__).parent / "data/images/t1.jpg"
+          faces = app.get(cv2.imread(str(sample)))
+          assert len(faces) >= 5, f"detection regressed: {len(faces)} faces in t1.jpg"
+
+          emb = faces[0].normed_embedding
+          assert emb.shape == (512,), f"embedding shape {emb.shape}"
+          assert abs(float(np.linalg.norm(emb)) - 1.0) < 1e-3, "embedding not normalised"
+
+          print(f"modules {loaded}, {len(faces)} faces, 512-d normalised embedding")
+          print("ENGINE_CHECK_PASSED")
           PY
+
+          # The sentinel makes vacuousness detectable. If someone drops the -i
+          # again, or the heredoc stops reaching the interpreter for any other
+          # reason, python exits 0 having run nothing and every assert above is
+          # skipped — but this grep still fails the build.
+          grep -q ENGINE_CHECK_PASSED /tmp/engine-check.log || {
+            echo "::error::the engine check produced no result — it did not actually run"
+            exit 1
+          }
+          echo "Production image AI engine OK (buffalo_l loaded and inferring offline)"
+
+      - name: Verify the image carries no GUI OpenGL stack
+        run: |
+          docker run --rm --entrypoint bash sentinelai-backend:ci -c '
+            fail=0
+            for p in libgl1 libllvm19 mesa-libgallium; do
+              if dpkg -s "$p" >/dev/null 2>&1; then
+                echo "::error::$p is installed; the headless OpenCV swap regressed"
+                fail=1
+              fi
+            done
+            for m in 1k3d68.onnx genderage.onnx; do
+              if [ -f "/home/sentinel/.insightface/models/buffalo_l/$m" ]; then
+                echo "::error::unused model $m is back in the image"
+                fail=1
+              fi
+            done
+            exit $fail
+          '
+          echo "OK: no GUI OpenGL stack, no unused models"
 
       - name: Build frontend image
         uses: docker/build-push-action@v6
@@ -350,7 +424,12 @@ jobs:
           import re, sys
 
           failures = []
-          for name in ("requirements.txt", "requirements-dev.txt", "requirements-ai.txt"):
+          for name in (
+              "requirements.txt",
+              "requirements-dev.txt",
+              "requirements-ai.txt",
+              "requirements-headless.txt",
+          ):
               text = open(name).read()
               # Join escaped line continuations so each requirement is one line.
               joined = text.replace("\\\n", " ")
@@ -379,7 +458,7 @@ jobs:
         working-directory: backend
         run: |
           pip install pip-tools
-          for f in requirements requirements-dev requirements-ai; do
+          for f in requirements requirements-dev requirements-ai requirements-headless; do
             cp "$f.txt" "/tmp/$f.txt.orig"
           done
           pip-compile --quiet --generate-hashes --strip-extras \
@@ -388,7 +467,9 @@ jobs:
             --output-file requirements-dev.txt requirements-dev.in
           pip-compile --quiet --generate-hashes --strip-extras \
             --output-file requirements-ai.txt requirements-ai.in
-          for f in requirements requirements-dev requirements-ai; do
+          pip-compile --quiet --generate-hashes --strip-extras \
+            --output-file requirements-headless.txt requirements-headless.in
+          for f in requirements requirements-dev requirements-ai requirements-headless; do
             if ! diff -q "/tmp/$f.txt.orig" "$f.txt" >/dev/null; then
               echo "::error::$f.txt is out of date with $f.in."
               echo "Regenerate with ./scripts/lock-requirements.sh and commit."
@@ -397,3 +478,26 @@ jobs:
             fi
           done
           echo "All lock files are in sync with their .in sources."
+
+      # requirements-headless.in pins opencv-python-headless by hand, because
+      # nothing derives it from the GUI build that insightface pulls in. A
+      # Dependabot bump to one and not the other would ship an image whose
+      # OpenCV is a different version from the audited one, and no other check
+      # would notice.
+      - name: Verify the two OpenCV builds are the same version
+        working-directory: backend
+        run: |
+          gui=$(grep -oE '^opencv-python==[0-9.]+' requirements.txt | cut -d= -f3)
+          headless=$(grep -oE '^opencv-python-headless==[0-9.]+' requirements-headless.txt | cut -d= -f3)
+          echo "opencv-python=$gui  opencv-python-headless=$headless"
+          if [ -z "$gui" ] || [ -z "$headless" ]; then
+            echo "::error::could not read one of the OpenCV versions"; exit 1
+          fi
+          if [ "$gui" != "$headless" ]; then
+            echo "::error::OpenCV version drift: requirements.txt has $gui but"
+            echo "  requirements-headless.in pins $headless. The production image"
+            echo "  swaps one for the other, so they must match. Update the pin in"
+            echo "  requirements-headless.in and re-run ./scripts/lock-requirements.sh."
+            exit 1
+          fi
+          echo "OK: both OpenCV distributions are $gui"

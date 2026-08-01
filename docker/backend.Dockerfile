@@ -29,10 +29,32 @@ RUN python -m venv "$VIRTUAL_ENV"
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
 WORKDIR /deps
-COPY backend/requirements.txt backend/requirements-ai.txt ./
+COPY backend/requirements.txt backend/requirements-ai.txt backend/requirements-headless.txt ./
 RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir --require-hashes -r requirements.txt \
     && pip install --no-cache-dir --require-hashes -r requirements-ai.txt
+
+# Swap the GUI OpenCV build for the headless one. insightface hard-declares
+# `opencv-python`, so the audited lock resolves the GUI build, which links
+# libGL.so.1 — and libgl1 hard-depends on libglx-mesa0 -> mesa-libgallium ->
+# libllvm19. That was 192 MB of software OpenGL renderer in a server image for
+# a highgui module nothing calls.
+#
+# Sequential (uninstall, then install) rather than resolved together, because
+# both distributions own the same cv2/ directory and letting pip install both
+# makes the winner depend on install order. Headless is hash-verified from its
+# own lock, so nothing enters the image outside an audited set — see
+# backend/requirements-headless.in.
+#
+# Asserted, not assumed: the build fails if cv2 still pulls libGL afterwards.
+RUN pip uninstall -y opencv-python \
+    && pip install --no-cache-dir --require-hashes -r requirements-headless.txt \
+    && python -c "import cv2; print('cv2', cv2.__version__, 'headless OK')" \
+    && if ldd "$(python -c 'import cv2,os;print(cv2.__file__)' | sed 's/__init__.py//')"*.so \
+         2>/dev/null | grep -q libGL; then \
+         echo "cv2 still links libGL — the headless swap did not take"; exit 1; \
+       fi \
+    && echo "verified: cv2 does not link libGL"
 
 # buffalo_l model pack, pinned by sha256 (official insightface v0.7 release).
 # A vendored copy in docker/models/ (gitignored) is used when present —
@@ -50,12 +72,43 @@ RUN if [ -f /tmp/vendored/buffalo_l.zip ]; then \
     && unzip -q /tmp/buffalo_l.zip -d /models/buffalo_l \
     && rm -rf /tmp/buffalo_l.zip /tmp/vendored
 
+# buffalo_l ships five models; the app loads three (INSIGHTFACE_MODULES in
+# app/services/face_service.py). Dropping landmark_3d_68 (1k3d68.onnx, 144 MB)
+# and genderage (1.3 MB) removes 145 MB — 43% of the pack — plus two ONNX
+# sessions' worth of RAM and init time per worker. Nothing reads
+# face.landmark_3d_68, face.sex or face.age.
+#
+# The checksum above is verified against the *complete* pack before anything is
+# removed, so provenance is still proven for what remains.
+#
+# Both lists are asserted rather than applied best-effort. A silent no-op here
+# would be the worst outcome: if a future pack renamed w600k_r50.onnx, a
+# `rm -f` of the unused names would succeed, the image would build clean, and
+# the missing recognition model would surface as "nothing ever matches" in
+# production rather than as a build failure.
+RUN cd /models/buffalo_l \
+    && for m in 1k3d68.onnx genderage.onnx; do \
+         [ -f "$m" ] || { echo "expected to remove $m but it is absent"; exit 1; }; \
+         rm -f "$m"; \
+       done \
+    && for m in det_10g.onnx 2d106det.onnx w600k_r50.onnx; do \
+         [ -f "$m" ] || { echo "required model $m missing after prune"; exit 1; }; \
+       done \
+    && echo "model pack pruned to: $(ls)" && du -sh /models/buffalo_l
+
 # ---------- runtime stage ----------
 FROM python:3.11-slim
 
-# OpenCV runtime libs + curl for container healthchecks
+# OpenCV runtime libs + curl for container healthchecks.
+#
+# libgl1 is deliberately absent: the venv ships headless OpenCV, which does not
+# link libGL. Adding it back would drag in libglx-mesa0, mesa-libgallium and
+# libllvm19 — 192 MB, and an entire software GL renderer's worth of attack
+# surface. If `import cv2` ever fails with "libGL.so.1: cannot open shared
+# object file", the headless swap in the build stage regressed; fix that rather
+# than reinstating libgl1.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libgl1 libglib2.0-0 curl && rm -rf /var/lib/apt/lists/*
+    libglib2.0-0 curl && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 

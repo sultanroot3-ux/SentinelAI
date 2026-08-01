@@ -33,11 +33,16 @@ docker run --rm --platform linux/amd64 \
     pip-compile --quiet --generate-hashes --strip-extras \
       --output-file requirements-ai.txt requirements-ai.in
 
-    chmod 0644 requirements.txt requirements-dev.txt requirements-ai.txt
+    # Headless OpenCV for the production image; see requirements-headless.in.
+    pip-compile --quiet --generate-hashes --strip-extras \
+      --output-file requirements-headless.txt requirements-headless.in
+
+    chmod 0644 requirements.txt requirements-dev.txt requirements-ai.txt \
+               requirements-headless.txt
   '
 
 echo "==> Done. Regenerated:"
-for f in requirements.txt requirements-dev.txt requirements-ai.txt; do
+for f in requirements.txt requirements-dev.txt requirements-ai.txt requirements-headless.txt; do
   printf '    backend/%-24s %s pinned packages\n' "$f" \
     "$(grep -cE '^[a-zA-Z0-9]' "${REPO_ROOT}/backend/${f}" || true)"
 done

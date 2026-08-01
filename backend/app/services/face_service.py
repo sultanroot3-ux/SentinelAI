@@ -72,13 +72,30 @@ def insightface_available() -> bool:
     return _INSIGHTFACE_AVAILABLE and cv2_available()
 
 
+# buffalo_l ships five models; we use three. Naming them explicitly rather than
+# letting FaceAnalysis load whatever .onnx files it finds does two things:
+#
+#   - it keeps dev and production identical. The production image omits the two
+#     unused models to save 145 MB, and a bare FaceAnalysis() adapts silently to
+#     whatever is on disk — so a code path touching face.sex would work on a
+#     developer machine with the full pack and fail only in production.
+#   - it drops ~145 MB of RAM and the session-init cost for models nothing reads.
+#
+# Left out: landmark_3d_68 (1k3d68.onnx, 144 MB) and genderage (1.3 MB). Nothing
+# in the codebase reads face.landmark_3d_68, face.sex or face.age. If that
+# changes, add the module here *and* to KEEP_MODELS in docker/backend.Dockerfile.
+INSIGHTFACE_MODULES = ["detection", "landmark_2d_106", "recognition"]
+
+
 def _get_insightface_app():
     """Lazily initialise the buffalo_l FaceAnalysis model (downloads ~300 MB once)."""
     global _INSIGHTFACE_APP
     if _INSIGHTFACE_APP is None:
         with _MODEL_LOCK:
             if _INSIGHTFACE_APP is None:  # double-checked: only one thread builds
-                app = FaceAnalysis(name="buffalo_l")
+                app = FaceAnalysis(
+                    name="buffalo_l", allowed_modules=INSIGHTFACE_MODULES
+                )
                 app.prepare(ctx_id=-1, det_size=(640, 640))  # CPU
                 _INSIGHTFACE_APP = app
     return _INSIGHTFACE_APP

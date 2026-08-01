@@ -1,0 +1,23 @@
+# OpenCV without the GUI (highgui) backend — production image only.
+#
+# insightface hard-declares `opencv-python`, so the audited lock necessarily
+# resolves the GUI build. That build links libGL.so.1, and on Debian trixie
+# `libgl1` hard-depends on libglx-mesa0 -> mesa-libgallium -> libllvm19. The
+# result was 192 MB of software OpenGL renderer (LLVM included) inside a
+# headless server image, to support a highgui module nothing calls — there is
+# no imshow/waitKey/namedWindow anywhere in the tree.
+#
+# The production image installs the audited set, uninstalls the GUI build, then
+# reinstalls the same OpenCV version from this file. This file is pinned and
+# hash-verified like the others, so B2 still holds: nothing reaches the image
+# except from an audited lock.
+#
+# This is deliberately NOT merged into requirements-ai.in. Both distributions
+# install the same `cv2/` directory, so having pip resolve them together makes
+# the winner depend on install order.
+#
+# The version must match opencv-python in requirements.txt — bump both together.
+
+-c requirements.txt
+
+opencv-python-headless==4.13.0.92
