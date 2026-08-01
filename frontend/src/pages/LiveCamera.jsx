@@ -117,7 +117,10 @@ export default function LiveCamera() {
       <div className="card pad">
         <div className="card-title-row">
           <h2>Live Feed</h2>
-          <div className="row-gap">
+          {/* `wrap`: this row holds a status badge, a source label and two
+              buttons. Without wrapping it measured 437px and pushed the page
+              to a 546px scrollWidth at a 375px viewport. */}
+          <div className="row-gap wrap">
             {status && (
               <>
                 <Badge value={status.available ? 'online' : 'offline'}>

@@ -90,7 +90,17 @@ def read_upload_capped(file: UploadFile, max_bytes: int = MAX_UPLOAD_BYTES) -> b
     return content
 
 
-def serialize_user(user: User) -> UserOut:
+def serialize_user(user: User, *, reveal_password_state: bool = True) -> UserOut:
+    """Serialize a user for the API.
+
+    `reveal_password_state=False` blanks `must_change_password`, for responses
+    that list *other* people. `GET /api/users` is readable by any authenticated
+    account (a receptionist needs the employee directory), so leaving the flag
+    populated told every logged-in user which privileged accounts were still on
+    a default or freshly-reset password — a target list, from the lowest tier of
+    access. The flag is only ever acted on for the *current* user, which is why
+    blanking it here changes no behaviour.
+    """
     return UserOut(
         id=user.id,
         name=user.name,
@@ -108,7 +118,7 @@ def serialize_user(user: User) -> UserOut:
         phone=user.phone,
         status=user.status,
         face_registered=user.face_registered,
-        must_change_password=user.must_change_password,
+        must_change_password=user.must_change_password if reveal_password_state else False,
         created_at=user.created_at,
     )
 

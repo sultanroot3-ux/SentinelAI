@@ -35,7 +35,7 @@ def list_users(
     limit: int = Query(DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     query = db.query(User).options(joinedload(User.department))
     if search:
@@ -53,7 +53,13 @@ def list_users(
     if role:
         query = query.filter(User.role == role)
     rows = apply_limit(query.order_by(User.id), response, limit, offset)
-    return [serialize_user(u) for u in rows]
+    # The directory is readable by every authenticated role, so it must not
+    # disclose which accounts are still on a default password — see
+    # serialize_user(). The requester's own row keeps the real value.
+    return [
+        serialize_user(u, reveal_password_state=(u.id == current_user.id))
+        for u in rows
+    ]
 
 
 @router.post("", response_model=UserOut, status_code=201)

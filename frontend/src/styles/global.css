@@ -261,6 +261,12 @@ code {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
+  /* Cards are flex items of .page. Without this they take their automatic
+     minimum size from their content, so a wide .data-table pushed the card
+     past the viewport and .table-wrap's overflow-x never engaged — the whole
+     document scrolled sideways instead of the table scrolling inside the card.
+     Measured on /: 476px scrollWidth at a 375px viewport, now 375px. */
+  min-width: 0;
 }
 
 .card.pad {
