@@ -3,8 +3,9 @@
 H1 — biometric retention purge (respecting case/watchlist protection + audit)
 H2 — short-lived stream tokens; access tokens rejected on the stream endpoint
 """
-from datetime import datetime, timedelta
+from datetime import timedelta
 
+from app.core.clock import utcnow
 from app.db.database import SessionLocal
 from app.models.models import AuditLog, Case, UnknownFace, Watchlist, WatchlistEntry
 from app.services import retention_service
@@ -20,7 +21,7 @@ class TestRetention:
             unknown_person_id=upid,
             camera="webcam",
             status="new",
-            timestamp=datetime.utcnow() - timedelta(days=days_old),
+            timestamp=utcnow() - timedelta(days=days_old),
         )
         db.add(uf)
         db.commit()

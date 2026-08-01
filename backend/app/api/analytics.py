@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import extract, func
 from sqlalchemy.orm import Session
 
+from app.core.clock import utcnow
 from app.core.security import get_current_user
 from app.db.database import get_db
 from app.models.models import Case, RecognitionLog, UnknownFace, User
@@ -20,7 +21,7 @@ router = APIRouter(prefix="/api/analytics", tags=["analytics"])
 
 def _today_start() -> datetime:
     # Timestamps are stored in UTC — use the UTC date, not the local one
-    return datetime.combine(datetime.utcnow().date(), time.min)
+    return datetime.combine(utcnow().date(), time.min)
 
 
 @router.get("/summary", response_model=AnalyticsSummary)

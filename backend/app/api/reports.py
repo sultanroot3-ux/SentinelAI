@@ -8,6 +8,7 @@ from fastapi.responses import Response, StreamingResponse
 from sqlalchemy.orm import Session, joinedload
 
 from app.api.utils import serialize_log
+from app.core.clock import utcnow
 from app.core.security import require_roles
 from app.db.database import get_db
 from app.models.models import RecognitionLog, User
@@ -55,7 +56,7 @@ def _build_pdf(logs, period: str, start: datetime) -> bytes:
         Paragraph("SentinelAI — Visitor Report", styles["Title"]),
         Paragraph(
             f"Period: {period} (from {start.date().isoformat()} UTC) · "
-            f"Generated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')} · "
+            f"Generated: {utcnow().strftime('%Y-%m-%d %H:%M UTC')} · "
             f"Total recognitions: {len(logs)}",
             styles["Normal"],
         ),
@@ -103,7 +104,7 @@ def _build_xlsx(logs, period: str, start: datetime) -> bytes:
 def _period_start(period: str) -> datetime:
     # Timestamps are stored in UTC, so the report window must be UTC too
     # (date.today() is local time and drifts near midnight).
-    today = datetime.combine(datetime.utcnow().date(), time.min)
+    today = datetime.combine(utcnow().date(), time.min)
     if period == "daily":
         return today
     if period == "weekly":
@@ -167,7 +168,7 @@ def visitors_report(
         return {
             "period": period,
             "date_from": start.isoformat(),
-            "generated_at": datetime.utcnow().isoformat(),
+            "generated_at": utcnow().isoformat(),
             "total": len(logs),
             "items": [serialize_log(l).model_dump(mode="json") for l in logs],
         }

@@ -14,10 +14,10 @@ import logging
 import threading
 import uuid
 from collections import deque
-from datetime import datetime
 
 from sqlalchemy.orm import Session
 
+from app.core.clock import utcnow
 from app.core.config import settings
 from app.models.models import (
     AccessHistory,
@@ -342,7 +342,7 @@ def _save_unknown_snapshot(img, box) -> str | None:
         crop = img[y0:y1, x0:x1]
         if crop.size == 0:
             crop = img
-        filename = f"unknown_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}.jpg"
+        filename = f"unknown_{utcnow().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}.jpg"
         path = settings.UNKNOWN_FACES_DIR / filename
         cv2.imwrite(str(path), crop)
         return f"/static/unknown_faces/{filename}"

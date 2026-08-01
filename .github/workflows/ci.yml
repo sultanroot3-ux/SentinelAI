@@ -24,6 +24,22 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # `datetime.utcnow()` is deprecated and will be removed. It is also the
+      # kind of thing that creeps back in one call site at a time, because each
+      # reintroduction looks harmless. Runs before the install so it fails in
+      # seconds. See backend/app/core/clock.py for what to use instead.
+      - name: Guard - no datetime.utcnow()
+        run: |
+          if grep -rn --include='*.py' 'datetime\.utcnow' backend/app backend/tests \
+               | grep -v '^backend/app/core/clock.py:'; then
+            echo
+            echo "::error::datetime.utcnow() is deprecated. Use utcnow() from app.core.clock"
+            echo "  (naive UTC, for database columns) or now_utc() (timezone-aware, for"
+            echo "  JWT exp and other offset-aware boundaries)."
+            exit 1
+          fi
+          echo "OK: no datetime.utcnow() outside app/core/clock.py"
+
       - uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}

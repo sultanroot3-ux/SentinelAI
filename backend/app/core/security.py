@@ -8,7 +8,7 @@ Token model:
 """
 import logging
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 
 import bcrypt
 from fastapi import Depends, HTTPException, status
@@ -16,6 +16,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 from sqlalchemy.orm import Session
 
+from app.core.clock import now_utc, to_naive_utc, utcnow
 from app.core.config import settings
 from app.db.database import get_db
 from app.models.models import RefreshToken, User
@@ -47,9 +48,7 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 
 def create_access_token(user: User) -> str:
-    expire = datetime.now(timezone.utc) + timedelta(
-        minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
-    )
+    expire = now_utc() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     payload = {
         "sub": str(user.id),
         "username": user.username,
@@ -62,14 +61,12 @@ def create_access_token(user: User) -> str:
 
 def create_refresh_token(user: User, db: Session) -> str:
     """Issue a refresh token and record its jti for rotation/revocation."""
-    expire = datetime.now(timezone.utc) + timedelta(
-        days=settings.REFRESH_TOKEN_EXPIRE_DAYS
-    )
+    # `exp` in the JWT is aware (the claim is an absolute instant); the column
+    # is naive UTC like every other timestamp — see app/core/clock.py.
+    expire = now_utc() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
     jti = uuid.uuid4().hex
     db.add(
-        RefreshToken(
-            jti=jti, user_id=user.id, expires_at=expire.replace(tzinfo=None)
-        )
+        RefreshToken(jti=jti, user_id=user.id, expires_at=to_naive_utc(expire))
     )
     db.commit()
     payload = {"sub": str(user.id), "jti": jti, "type": "refresh", "exp": expire}
@@ -90,7 +87,7 @@ def consume_refresh_token(token: str, db: Session) -> User:
     )
     if row is None or row.revoked:
         raise HTTPException(status_code=401, detail="Refresh token revoked or unknown")
-    if row.expires_at < datetime.utcnow():
+    if row.expires_at < utcnow():  # naive both sides: the column stores naive UTC
         raise HTTPException(status_code=401, detail="Refresh token expired")
     row.revoked = True  # single-use: rotation happens by issuing a new one
     db.commit()
@@ -144,9 +141,7 @@ STREAM_TOKEN_EXPIRE_SECONDS = 60
 
 
 def create_stream_token(user: User) -> str:
-    expire = datetime.now(timezone.utc) + timedelta(
-        seconds=STREAM_TOKEN_EXPIRE_SECONDS
-    )
+    expire = now_utc() + timedelta(seconds=STREAM_TOKEN_EXPIRE_SECONDS)
     payload = {"sub": str(user.id), "type": "stream", "exp": expire}
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 

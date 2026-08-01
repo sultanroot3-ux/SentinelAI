@@ -1,10 +1,10 @@
 """Visitor registration + check-in / check-out."""
-from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.orm import Session, joinedload
 
 from app.api.utils import DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT, apply_limit
+from app.core.clock import utcnow
 from app.core.security import require_roles
 from app.db.database import get_db
 from app.models.models import AccessHistory, User, Visitor
@@ -100,7 +100,7 @@ def check_in(
     if visitor.status == "checked_in":
         raise HTTPException(status_code=422, detail="Visitor already checked in")
     visitor.status = "checked_in"
-    visitor.check_in = datetime.utcnow()
+    visitor.check_in = utcnow()
     db.add(AccessHistory(visitor_id=visitor.id, event="check_in",
                          detail=f"Visitor '{visitor.name}' checked in"))
     db.commit()
@@ -121,7 +121,7 @@ def check_out(
     if visitor.status != "checked_in":
         raise HTTPException(status_code=422, detail="Visitor is not checked in")
     visitor.status = "checked_out"
-    visitor.check_out = datetime.utcnow()
+    visitor.check_out = utcnow()
     db.add(AccessHistory(visitor_id=visitor.id, event="check_out",
                          detail=f"Visitor '{visitor.name}' checked out"))
     db.commit()

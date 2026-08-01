@@ -12,10 +12,10 @@ Data policy (enforced by construction):
 import logging
 import shutil
 import uuid
-from datetime import datetime
 
 from sqlalchemy.orm import Session
 
+from app.core.clock import utcnow
 from app.core.config import settings
 from app.models.models import (
     AccessHistory,
@@ -307,7 +307,7 @@ def _similar_unknown_sightings(db: Session, embedding, threshold: float = 0.45,
 def _save_snapshot(img) -> str | None:
     try:
         filename = (
-            f"investigation_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
+            f"investigation_{utcnow().strftime('%Y%m%d_%H%M%S')}"
             f"_{uuid.uuid4().hex[:8]}.jpg"
         )
         path = settings.UNKNOWN_FACES_DIR / filename
@@ -356,7 +356,7 @@ def _employee_report(db: Session, user: User, score: float, camera: Camera | Non
             if location
             else None
         ),
-        "detection_time": datetime.utcnow().isoformat(),
+        "detection_time": utcnow().isoformat(),
         "last_seen": last_seen_log.timestamp.isoformat() if last_seen_log else None,
         "recognition_confidence": round(score, 4),
         "recognition_history": _employee_history(db, user.id),
@@ -504,7 +504,7 @@ def investigate_frame(image_bytes: bytes, db: Session,
         "faces": reports,
         "scene": analyze_scene(img, len(faces)),
         "camera": camera_name,
-        "analyzed_at": datetime.utcnow().isoformat(),
+        "analyzed_at": utcnow().isoformat(),
         "data_policy": (
             "Identity data is sourced exclusively from the authorized local "
             "database. AI attributes are estimates and are labelled as such."

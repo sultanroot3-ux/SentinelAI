@@ -14,11 +14,12 @@ Policy (docs/DATA_RETENTION.md):
 """
 import asyncio
 import logging
-from datetime import datetime, timedelta
+from datetime import timedelta
 from pathlib import Path
 
 from sqlalchemy.orm import Session
 
+from app.core.clock import utcnow
 from app.core.config import settings
 from app.models.models import Case, UnknownFace, WatchlistEntry
 from app.services.audit_service import write_audit
@@ -53,7 +54,7 @@ def purge_expired_unknowns(db: Session) -> int:
     if retention_days <= 0:
         return 0
 
-    cutoff = datetime.utcnow() - timedelta(days=retention_days)
+    cutoff = utcnow() - timedelta(days=retention_days)
 
     # Protected: evidence linked to a case (either direction) or watchlisted
     case_linked = db.query(Case.unknown_face_id).filter(

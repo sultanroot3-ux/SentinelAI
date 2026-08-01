@@ -15,6 +15,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.clock import utcnow
 from app.db.database import Base
 
 
@@ -91,7 +92,7 @@ class User(Base):
     face_embedding: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     # Forces a password change on next login (set for seeded/reset accounts)
     must_change_password: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
 
     department: Mapped["Department | None"] = relationship(back_populates="users")
     recognition_logs: Mapped[list["RecognitionLog"]] = relationship(back_populates="user")
@@ -112,7 +113,7 @@ class RefreshToken(Base):
     )
     expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     revoked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
 
 
 class CameraLocation(Base):
@@ -139,7 +140,7 @@ class Camera(Base):
         ForeignKey("camera_locations.id", ondelete="SET NULL"), nullable=True
     )
     active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
 
     location: Mapped["CameraLocation | None"] = relationship(back_populates="cameras")
 
@@ -161,7 +162,7 @@ class RecognitionLog(Base):
     score: Mapped[float | None] = mapped_column(Float, nullable=True)
     snapshot_url: Mapped[str | None] = mapped_column(String(255), nullable=True)
     timestamp: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, index=True, nullable=False
+        DateTime, default=utcnow, index=True, nullable=False
     )
 
     user: Mapped["User | None"] = relationship(back_populates="recognition_logs")
@@ -188,7 +189,7 @@ class UnknownFace(Base):
         ForeignKey("cases.id", ondelete="SET NULL", use_alter=True), nullable=True
     )
     timestamp: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, index=True, nullable=False
+        DateTime, default=utcnow, index=True, nullable=False
     )
 
     camera_ref: Mapped["Camera | None"] = relationship()
@@ -216,7 +217,7 @@ class FaceEmbedding(Base):
     # 512-d float32 numpy .tobytes()
     embedding: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
     model: Mapped[str] = mapped_column(String(40), default="buffalo_l", nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
 
     user: Mapped["User | None"] = relationship(back_populates="embeddings")
     unknown_face: Mapped["UnknownFace | None"] = relationship(back_populates="embeddings")
@@ -237,7 +238,7 @@ class Visitor(Base):
     status: Mapped[str] = mapped_column(String(20), default="expected", nullable=False)
     check_in: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     check_out: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
 
     host: Mapped["User | None"] = relationship()
 
@@ -250,7 +251,7 @@ class Watchlist(Base):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     level: Mapped[str] = mapped_column(String(20), default="warning", nullable=False)
     active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
 
     entries: Mapped[list["WatchlistEntry"]] = relationship(
         back_populates="watchlist", cascade="all, delete-orphan"
@@ -276,7 +277,7 @@ class WatchlistEntry(Base):
     added_by: Mapped[int | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
 
     watchlist: Mapped["Watchlist"] = relationship(back_populates="entries")
     user: Mapped["User | None"] = relationship(foreign_keys=[user_id])
@@ -305,7 +306,7 @@ class AccessHistory(Base):
     event: Mapped[str] = mapped_column(String(20), default="detected", nullable=False)
     detail: Mapped[str | None] = mapped_column(Text, nullable=True)
     timestamp: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, index=True, nullable=False
+        DateTime, default=utcnow, index=True, nullable=False
     )
 
     user: Mapped["User | None"] = relationship()
@@ -328,9 +329,9 @@ class Case(Base):
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
     resolution: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+        DateTime, default=utcnow, onupdate=utcnow, nullable=False
     )
 
     unknown_face: Mapped["UnknownFace | None"] = relationship(foreign_keys=[unknown_face_id])
@@ -346,7 +347,7 @@ class Notification(Base):
     level: Mapped[str] = mapped_column(String(20), default="info", nullable=False)
     read: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, index=True, nullable=False
+        DateTime, default=utcnow, index=True, nullable=False
     )
 
 
@@ -361,7 +362,7 @@ class AuditLog(Base):
     action: Mapped[str] = mapped_column(String(80), nullable=False)
     detail: Mapped[str | None] = mapped_column(Text, nullable=True)
     timestamp: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, index=True, nullable=False
+        DateTime, default=utcnow, index=True, nullable=False
     )
 
 

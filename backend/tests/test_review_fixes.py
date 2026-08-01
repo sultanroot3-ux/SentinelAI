@@ -227,12 +227,11 @@ def test_seed_source_contains_no_plaintext_password_in_log_call():
 # ---------------------------------------------------------------------------
 def _make_recognition_log(db):
     """One recognition inside the daily report window."""
-    from datetime import datetime
-
+    from app.core.clock import utcnow
     from app.models.models import RecognitionLog
 
     row = RecognitionLog(
-        user_id=None, camera="test-cam", score=0.9, timestamp=datetime.utcnow()
+        user_id=None, camera="test-cam", score=0.9, timestamp=utcnow()
     )
     db.add(row)
     db.commit()
