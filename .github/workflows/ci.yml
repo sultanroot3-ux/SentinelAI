@@ -154,7 +154,7 @@ jobs:
       # The buffalo_l pack is ~300 MB; caching it keeps the job fast on a warm
       # cache. Keyed by the pinned model version so a change re-downloads.
       - name: Cache buffalo_l model pack
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.insightface/models
           key: insightface-buffalo_l-v0.7
