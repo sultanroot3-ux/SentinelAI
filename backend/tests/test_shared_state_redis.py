@@ -87,41 +87,74 @@ def test_window_clear(backend):
 
 
 # ---- token bucket (Lua: HMGET + refill + HMSET) ---------------------------
+#
+# Refill rates here are deliberately slow. These tests assert that a take is
+# *denied*, which is only true if no token is regained between the calls that
+# drain the bucket and the call that must fail — so the token period has to
+# comfortably exceed the round-trip time of the intervening calls.
+#
+# The original rates (10-100 tokens/s, i.e. a token every 10-100 ms) held only
+# against fakeredis, which answers in microseconds in-process. Against a real
+# Redis the same sequence flaked: three round-trips regularly exceed 10 ms on a
+# loaded host, so the bucket legitimately refilled mid-assertion and
+# `test_bucket_never_exceeds_capacity` failed with [True, True, True]. Measured
+# at 3 failures in 5 consecutive runs before this change.
+#
+# NO_REFILL is one token per 20 s: slow enough that nothing regains during a
+# test, while leaving the semantics under test (capacity, ordering, per-key
+# isolation) unchanged, since those are rate-independent.
+NO_REFILL = 0.05
+
+
 def test_bucket_allows_burst_then_denies(backend):
-    results = [backend.bucket_take("b", 5, 1.0)[0] for _ in range(8)]
+    results = [backend.bucket_take("b", 5, NO_REFILL)[0] for _ in range(8)]
     assert results[:5] == [True] * 5
     assert results[5:] == [False] * 3
 
 
 def test_bucket_reports_retry_after(backend):
+    """Retry-After must reflect the configured refill rate.
+
+    Rate 1.0/s means one token per second, so the wait is ~1 s. The upper bound
+    allows for the drain calls consuming a little of it.
+    """
     for _ in range(5):
-        backend.bucket_take("b", 5, 2.0)
-    allowed, retry = backend.bucket_take("b", 5, 2.0)
+        backend.bucket_take("b", 5, 1.0)
+    allowed, retry = backend.bucket_take("b", 5, 1.0)
     assert allowed is False
-    assert 0.0 < retry <= 0.6
+    assert 0.0 < retry <= 1.1
 
 
 def test_bucket_refills_over_time(backend):
+    # 1 token/s: the drain and the denied take share a full second of headroom,
+    # and the sleep is unambiguously longer than one token period.
     for _ in range(3):
-        backend.bucket_take("b", 3, 10.0)
-    assert backend.bucket_take("b", 3, 10.0)[0] is False
-    time.sleep(0.25)
-    assert backend.bucket_take("b", 3, 10.0)[0] is True
+        backend.bucket_take("b", 3, 1.0)
+    assert backend.bucket_take("b", 3, 1.0)[0] is False
+    time.sleep(1.3)
+    assert backend.bucket_take("b", 3, 1.0)[0] is True
 
 
 def test_bucket_never_exceeds_capacity(backend):
-    backend.bucket_take("b", 2, 100.0)
-    time.sleep(0.2)
-    assert [backend.bucket_take("b", 2, 100.0)[0] for _ in range(3)] == [
+    """Idle time must not accrue tokens beyond capacity.
+
+    Takes 1 of 2, then idles for longer than it would take to refill *past*
+    capacity at this rate (2 s idle x 1 token/s = 2 tokens, on top of the 1
+    remaining, against a capacity of 2). If the cap were missing the third take
+    below would succeed.
+    """
+    backend.bucket_take("b", 2, 1.0)
+    time.sleep(2.2)
+    assert [backend.bucket_take("b", 2, 1.0)[0] for _ in range(3)] == [
         True, True, False
     ]
 
 
 def test_buckets_are_per_key(backend):
     for _ in range(2):
-        backend.bucket_take("u1", 2, 1.0)
-    assert backend.bucket_take("u1", 2, 1.0)[0] is False
-    assert backend.bucket_take("u2", 2, 1.0)[0] is True
+        backend.bucket_take("u1", 2, NO_REFILL)
+    assert backend.bucket_take("u1", 2, NO_REFILL)[0] is False
+    assert backend.bucket_take("u2", 2, NO_REFILL)[0] is True
 
 
 # ---- cooldown (SET NX EX) -------------------------------------------------
@@ -153,7 +186,11 @@ def test_matches_memory_backend_semantics(backend):
     from app.core.shared_state import MemoryBackend
 
     mem = MemoryBackend()
-    for key, cap, rate in (("x", 4, 1.0), ("y", 2, 5.0)):
+    # NO_REFILL for the same reason as above, and doubly so here: the Redis
+    # backend pays network latency the in-memory one does not, so a rate fast
+    # enough to refill during those round-trips makes the two diverge for
+    # timing reasons alone and reports it as a semantic difference.
+    for key, cap, rate in (("x", 4, NO_REFILL), ("y", 2, NO_REFILL)):
         redis_results = [backend.bucket_take(key, cap, rate)[0] for _ in range(cap + 2)]
         mem_results = [mem.bucket_take(key, cap, rate)[0] for _ in range(cap + 2)]
         assert redis_results == mem_results, f"backends diverged on bucket {key}"

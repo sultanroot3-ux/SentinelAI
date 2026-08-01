@@ -117,7 +117,7 @@ buttons record events into **Access History**. Visitor lifecycle:
 | Symptom | Check |
 |---|---|
 | Camera Offline badge | host camera permissions; `camera_source` value; on Linux ensure `/dev/video0` is mapped into the container |
-| Recognition slow / choppy AI overlay | CPU-bound inference — raise `UVICORN_WORKERS`, lower AI-overlay use, or move to AVX2/GPU hardware |
+| Recognition slow / choppy AI overlay | CPU-bound inference. **Do not raise `UVICORN_WORKERS` for this** — measured throughput is flat from concurrency 1 to 8 because ONNX Runtime already uses every core for a single inference, so extra workers only add queueing and ~1.25 GiB RSS each. Add CPU cores, move to a GPU `onnxruntime` build, or lower AI-overlay use. See [PERFORMANCE.md](../docs/PERFORMANCE.md) §2 |
 | 429 on login | rate limiter engaged — wait for `Retry-After` or check for brute-force attempts in the audit log |
 | Unknown flood from one person | enroll them (Users → photo) or raise `recognition_threshold` carefully |
 | Health check `database: down` | `docker compose ps db`, then `docker compose logs db` |

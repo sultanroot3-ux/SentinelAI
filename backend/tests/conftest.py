@@ -28,6 +28,31 @@ from fastapi.testclient import TestClient  # noqa: E402
 from app.main import app  # noqa: E402
 from app.db.database import SessionLocal  # noqa: E402
 
+# --- give a persistent database the same clean slate SQLite gets -----------
+# The SQLite default lives in a fresh mkdtemp per run, so it is always empty.
+# A PostgreSQL URL points at a database that survives the run, and the suite
+# assumes an empty schema: re-running it locally against the same PostgreSQL
+# failed 13 tests on leftover rows (duplicate usernames, retention fixtures
+# that count records, watchlist uniqueness). CI never saw this because its
+# postgres service container is new each run — which is exactly why it is worth
+# fixing here rather than relying on the container.
+#
+# Guarded to non-SQLite only, and only ever runs against SENTINEL_TEST_DATABASE_URL,
+# which is by definition a throwaway database. The app's lifespan recreates the
+# schema on startup (main.py `Base.metadata.create_all`).
+# Uses a schema reset rather than `Base.metadata.drop_all`: the unknown_faces
+# -> cases foreign key is declared with use_alter=True and no explicit name, and
+# SQLAlchemy cannot emit DROP CONSTRAINT for an unnamed altered constraint
+# ("it has no name"). Dropping the schema sidesteps the ordering problem
+# entirely.
+if not os.environ["SENTINEL_DATABASE_URL"].startswith("sqlite"):
+    from app.db.database import engine  # noqa: E402
+
+    if engine.dialect.name == "postgresql":
+        with engine.begin() as _conn:
+            _conn.exec_driver_sql("DROP SCHEMA public CASCADE")
+            _conn.exec_driver_sql("CREATE SCHEMA public")
+
 
 @pytest.fixture(scope="session")
 def client():

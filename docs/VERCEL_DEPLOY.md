@@ -7,7 +7,7 @@ platform. This is not a tuning problem — it is structural:
 
 | Backend requirement | Vercel limit |
 |---|---|
-| 2.23 GB image (InsightFace + ONNX Runtime + OpenCV + `buffalo_l`) | 250 MB unzipped per function |
+| 1.65 GB image (InsightFace + ONNX Runtime + OpenCV + `buffalo_l`) | 250 MB unzipped per function |
 | Persistent disk for uploads, snapshots, `unknown_faces` | Ephemeral filesystem |
 | Long-lived MJPEG stream connections | Function max duration |
 | PostgreSQL + Redis (Redis is mandatory when `UVICORN_WORKERS > 1`) | Not provided; external only |

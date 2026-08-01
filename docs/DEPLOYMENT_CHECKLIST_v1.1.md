@@ -25,7 +25,7 @@ If you are deploying a later commit, re-confirm CI is green for *that* commit.
 ## 1. Backend — the part that must NOT go on Vercel
 
 The backend needs a container host (VM with `docker-compose.prod.yml`, Railway,
-Render or Fly.io). It cannot run as a serverless function: 2.23 GB image,
+Render or Fly.io). It cannot run as a serverless function: 1.65 GB image,
 persistent disk, long-lived MJPEG connections.
 
 ### Required environment

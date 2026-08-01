@@ -36,7 +36,7 @@ actually executed; §7 lists what could *not* be verified locally and why.
 | Backend (`pytest`, SQLite + real InsightFace) | **259 passed**, 0 failed, 0 skipped, 99s |
 | Playwright E2E (Chromium, production build) | **14 passed**, 1.2m |
 | Frontend production build | Clean, 359 kB JS / 101 kB gzip |
-| Backend production image | Built (2.23 GB); AI engine loads and infers **offline** inside the container |
+| Backend production image | Built (2.23 GB at sign-off; **1.65 GB since** — §10.1); AI engine loads and infers **offline** inside the container |
 | Frontend production image | Built |
 | Production compose stack | Booted healthy: PostgreSQL + Redis + backend (2 workers) |
 | Dependency locks | 89 requirements across 3 files — **100% pinned and hash-verified** |
