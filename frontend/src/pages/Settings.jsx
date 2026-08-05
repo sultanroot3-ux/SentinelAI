@@ -8,6 +8,7 @@ const DEFAULTS = {
   liveness_enabled: false,
   camera_source: '0',
   notify_on_unknown: true,
+  notify_on_watchlist: true,
   unknown_retention_days: 0,
   email_enabled: false,
   smtp_host: '',
@@ -46,6 +47,7 @@ export default function Settings() {
           liveness_enabled: toBool(d?.liveness_enabled ?? DEFAULTS.liveness_enabled),
           camera_source: String(d?.camera_source ?? DEFAULTS.camera_source),
           notify_on_unknown: toBool(d?.notify_on_unknown ?? DEFAULTS.notify_on_unknown),
+          notify_on_watchlist: toBool(d?.notify_on_watchlist ?? DEFAULTS.notify_on_watchlist),
           unknown_retention_days: Number(d?.unknown_retention_days ?? DEFAULTS.unknown_retention_days),
           email_enabled: toBool(d?.email_enabled ?? DEFAULTS.email_enabled),
           smtp_host: String(d?.smtp_host ?? DEFAULTS.smtp_host),
@@ -76,6 +78,7 @@ export default function Settings() {
         liveness_enabled: form.liveness_enabled,
         camera_source: form.camera_source,
         notify_on_unknown: form.notify_on_unknown,
+        notify_on_watchlist: form.notify_on_watchlist,
         unknown_retention_days: Number(form.unknown_retention_days),
         email_enabled: form.email_enabled,
         smtp_host: form.smtp_host,
@@ -198,6 +201,23 @@ export default function Settings() {
             <strong>Notify on unknown visitor</strong>
             <span className="muted-text block">
               Create an alert whenever an unrecognized face is detected.
+            </span>
+          </span>
+        </label>
+
+        <label className="toggle-row">
+          <input
+            type="checkbox"
+            checked={form.notify_on_watchlist}
+            onChange={(e) => setForm((f) => ({ ...f, notify_on_watchlist: e.target.checked }))}
+          />
+          <span className="toggle-track" />
+          <span>
+            <strong>Notify on watchlist match</strong>
+            <span className="muted-text block">
+              Alert when someone on an active watchlist is seen by a camera. The
+              audit log records every match either way &mdash; this only controls
+              the alert.
             </span>
           </span>
         </label>

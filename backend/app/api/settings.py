@@ -24,6 +24,7 @@ KNOWN_KEYS = set(DEFAULT_SETTINGS)
 _BOOL_KEYS = (
     "liveness_enabled",
     "notify_on_unknown",
+    "notify_on_watchlist",
     "email_enabled",
     "smtp_tls",
     "telegram_enabled",

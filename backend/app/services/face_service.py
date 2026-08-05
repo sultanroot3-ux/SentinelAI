@@ -9,6 +9,12 @@ Pipeline (see docs/API_CONTRACT.md):
 frame -> detect faces -> liveness -> embed -> cosine match vs registered users
       -> match:   RecognitionLog (rate-limited per user)
       -> unknown: snapshot + UnknownFace row + alert notification (rate-limited)
+      -> either:  watchlist check (rate-limited per person per camera) ->
+                  audit entry + alert notification
+
+The watchlist check runs on the insightface path only: the Haar fallback
+produces no embeddings and therefore no identity, so there is nothing to match
+a watchlist against.
 """
 import logging
 import threading
@@ -25,6 +31,8 @@ from app.models.models import (
     RecognitionLog,
     UnknownFace,
     User,
+    Watchlist,
+    WatchlistEntry,
 )
 from app.services import notification_service
 from app.services.settings_service import get_setting
@@ -34,6 +42,19 @@ logger = logging.getLogger("sentinelai.face")
 # ---------------------------------------------------------------------------
 # Optional dependency loading
 # ---------------------------------------------------------------------------
+# TODO(known, repo-wide — do not re-investigate): binding these names to None on
+# ImportError makes every later use report as an error under pyright —
+# reportOptionalMemberAccess on np.*/cv2.* ("frombuffer is not a known attribute
+# of None") and reportPossiblyUnbound on FaceAnalysis. Around a dozen fire in
+# this file alone; they are ALL false positives of this pattern, not real bugs.
+# The guards cv2_available() / insightface_available() are what actually make
+# these accesses safe, and every call path checks one of them first.
+#
+# Accepted as-is: no type checker runs in CI (.github/workflows/ci.yml), so
+# nothing is gated on it. Silencing it properly means either per-line ignores
+# throughout or restructuring the optional imports behind typed shims — a
+# deliberate repo-wide cleanup, not something to fix in passing. If you came
+# here because your editor lit up: this is expected, and it is not new.
 try:
     import numpy as np
 except ImportError:  # pragma: no cover
@@ -347,6 +368,308 @@ def _match_embedding(embedding, db: Session, threshold: float):
 
 
 # ---------------------------------------------------------------------------
+# Watchlist alerting
+# ---------------------------------------------------------------------------
+# Watchlists used to be storage-only: full CRUD, a UI page, hits surfaced in
+# on-demand investigation reports, and purge exemption in retention — but the
+# live pipeline never consulted them, so a flagged person could walk past a
+# camera and produce nothing but a routine recognition log.
+#
+# Two lookup paths, because the two entry kinds are not alike:
+#   - employees: exact user_id membership, a dict hit.
+#   - unknown persons: every sighting inserts a NEW unknown_faces row, so the
+#     watchlisted row's id can never appear again. Re-identification has to go
+#     through the embedding, the same cosine match used for employees.
+#
+# Alerts are keyed per (person, camera) rather than per person. The
+# RecognitionLog cooldown is per user only, so a flagged person crossing from
+# one camera to the next writes no second log — inheriting that key would make
+# exactly the movement a watchlist exists to surface the thing it stays silent
+# about.
+_WATCHLIST_ALERT_COOLDOWN_SECONDS = 60.0
+
+# Structural edits (add/remove an entry, archive a list) change the signature
+# and rebuild immediately, which is what a cross-worker write looks like. An
+# in-place field edit — flipping a level from warning to alert — changes no
+# count, so a TTL bounds that staleness too.
+#
+# 30s, not a few seconds: this refresh re-reads every watchlist entry, and the
+# only thing it can discover is a changed label or reason on a list whose
+# membership is unchanged. Same-worker edits are already instant (the API calls
+# invalidate_watchlist_cache), and membership changes are caught by the
+# signature regardless of the TTL. Paying that scan every few seconds bought
+# nothing and cost ~30 ms per tick on a 1000-entry watchlist.
+_WATCHLIST_CACHE_TTL_SECONDS = 30.0
+
+# Measured: 1k watchlisted unknowns = 2.9 MB resident, 10k = 28 MB (20 MB of
+# float32 embeddings + 8 MB of Python metadata), per worker. 10k is where that
+# starts being worth an operator's attention on a small container.
+_WATCHLIST_SIZE_WARN_THRESHOLD = 10_000
+
+_WATCHLIST_CACHE: dict = {
+    "valid": False,
+    "sig": None,
+    "built_at": 0.0,
+    "users": {},           # user_id -> hit metadata
+    "unknown_ids": None,   # np.ndarray of unknown_face_id, row-aligned to the matrix
+    "unknown_matrix": None,  # (N, 512) unit-normalized
+    "unknown_id_set": None,  # frozenset backing the matrix; guards its reuse
+    "unknown_meta": {},    # unknown_face_id -> hit metadata
+}
+_WATCHLIST_LOCK = threading.Lock()
+
+
+def invalidate_watchlist_cache() -> None:
+    """Call after any watchlist/entry write for same-worker immediacy."""
+    _WATCHLIST_CACHE["valid"] = False
+
+
+def _watchlist_signature(db: Session):
+    """Cheap cross-worker change signal for watchlist membership."""
+    from sqlalchemy import func, select
+
+    active_lists = (
+        select(func.count(Watchlist.id))
+        .where(Watchlist.active.is_(True))
+        .scalar_subquery()
+    )
+    return db.query(
+        func.count(WatchlistEntry.id), func.max(WatchlistEntry.id), active_lists
+    ).one()
+
+
+def _get_watchlist_state(db: Session) -> dict:
+    """Cached membership of every ACTIVE watchlist.
+
+    Returns the cache dict itself; callers must treat it as read-only.
+    """
+    import time
+
+    sig = _watchlist_signature(db)
+    fresh = (time.time() - _WATCHLIST_CACHE["built_at"]) < _WATCHLIST_CACHE_TTL_SECONDS
+    if _WATCHLIST_CACHE["valid"] and _WATCHLIST_CACHE["sig"] == sig and fresh:
+        return _WATCHLIST_CACHE
+
+    with _WATCHLIST_LOCK:
+        fresh = (time.time() - _WATCHLIST_CACHE["built_at"]) < _WATCHLIST_CACHE_TTL_SECONDS
+        if _WATCHLIST_CACHE["valid"] and _WATCHLIST_CACHE["sig"] == sig and fresh:
+            return _WATCHLIST_CACHE
+
+        rows = (
+            db.query(WatchlistEntry, Watchlist)
+            .join(Watchlist, WatchlistEntry.watchlist_id == Watchlist.id)
+            .filter(Watchlist.active.is_(True))
+            .all()
+        )
+        users: dict[int, dict] = {}
+        unknown_meta: dict[int, dict] = {}
+        for entry, wl in rows:
+            meta = {
+                "watchlist": wl.name,
+                "level": wl.level,
+                "reason": entry.reason,
+                "entry_id": entry.id,
+            }
+            # First match wins if a person is on several lists; ordering by id
+            # keeps that deterministic rather than dependent on row order.
+            if entry.user_id is not None:
+                if entry.user_id not in users or meta["entry_id"] < users[entry.user_id]["entry_id"]:
+                    users[entry.user_id] = meta
+            elif entry.unknown_face_id is not None:
+                prev = unknown_meta.get(entry.unknown_face_id)
+                if prev is None or meta["entry_id"] < prev["entry_id"]:
+                    unknown_meta[entry.unknown_face_id] = meta
+
+        # The embedding matrix is by far the expensive part of a rebuild (it
+        # reads and normalizes 512 float32s per watchlisted unknown), and it
+        # depends only on WHICH ids are listed. The TTL exists to catch in-place
+        # edits — a level or reason change — which cannot alter that set. So
+        # reuse the matrix whenever the id set is unchanged: without this, a
+        # watchlist of ~1000 unknowns re-read every embedding every 5 seconds
+        # and stalled an analyzed stream for ~350 ms each time.
+        id_set = frozenset(unknown_meta)
+        if id_set == _WATCHLIST_CACHE.get("unknown_id_set") and (
+            _WATCHLIST_CACHE["unknown_matrix"] is not None or not id_set
+        ):
+            pass  # matrix + ids still valid
+        else:
+            ids, vectors = [], []
+            if unknown_meta:
+                # Joined rather than filtered with .in_(ids): a bind parameter
+                # per watchlisted id blows the driver's parameter ceiling
+                # (SQLite 32766, PostgreSQL 65535) and raises. The raise is
+                # caught upstream, so the failure mode was watchlist alerting
+                # silently switching off for the whole deployment once the list
+                # grew past the limit — the worst possible way for a security
+                # control to fail. The join has no such ceiling.
+                embeddings = (
+                    db.query(
+                        FaceEmbedding.id,
+                        FaceEmbedding.unknown_face_id,
+                        FaceEmbedding.embedding,
+                    )
+                    .join(
+                        WatchlistEntry,
+                        WatchlistEntry.unknown_face_id == FaceEmbedding.unknown_face_id,
+                    )
+                    .join(Watchlist, Watchlist.id == WatchlistEntry.watchlist_id)
+                    .filter(Watchlist.active.is_(True))
+                    .all()
+                )
+                # A person on two active lists joins twice. Deduped on the row
+                # id in Python rather than SQL DISTINCT, which would have to
+                # compare the LargeBinary embedding column — cheap on SQLite,
+                # unpredictable on PostgreSQL.
+                seen: set[int] = set()
+                for emb_id, uid, blob in embeddings:
+                    if emb_id in seen:
+                        continue
+                    seen.add(emb_id)
+                    vec = np.frombuffer(blob, dtype=np.float32)
+                    norm = float(np.linalg.norm(vec))
+                    if vec.size == 0 or norm == 0:
+                        continue
+                    ids.append(uid)
+                    vectors.append(vec / norm)
+            _WATCHLIST_CACHE["unknown_ids"] = np.asarray(ids) if ids else None
+            _WATCHLIST_CACHE["unknown_matrix"] = np.stack(vectors) if vectors else None
+            _WATCHLIST_CACHE["unknown_id_set"] = id_set
+            # Resident per worker: 2 KB of embedding per watchlisted unknown,
+            # plus ~800 B of metadata. Warn rather than cap — silently dropping
+            # entries would mean silently not alerting on them, which is the one
+            # outcome this feature exists to prevent. An operator who sees this
+            # can prune the list or raise the container memory limit.
+            if len(ids) > _WATCHLIST_SIZE_WARN_THRESHOLD:
+                logger.warning(
+                    "Watchlist re-identification set is large: %d embeddings "
+                    "(~%.0f MB resident per worker). Matching stays correct; "
+                    "consider pruning resolved entries.",
+                    len(ids), len(ids) * 2848 / 1e6,
+                )
+
+        _WATCHLIST_CACHE["users"] = users
+        _WATCHLIST_CACHE["unknown_meta"] = unknown_meta
+        _WATCHLIST_CACHE["sig"] = sig
+        _WATCHLIST_CACHE["built_at"] = time.time()
+        _WATCHLIST_CACHE["valid"] = True
+    return _WATCHLIST_CACHE
+
+
+def _raise_watchlist_alert(db: Session, kind: str, ident: int, meta: dict,
+                           camera: str, subject: str) -> None:
+    """Audit + notify a watchlist match, once per person per camera per window.
+
+    Identity, watchlist name and reason go to the audit log, which is role-gated
+    (admin / security_officer). The in-app notification says only that a
+    watchlisted person was seen and on which camera: /api/notifications is
+    readable by EVERY authenticated role, so naming the person there would hand
+    a receptionist the contents of the watchlist.
+    """
+    from app.core.shared_state import shared_state
+    from app.services.audit_service import write_audit
+    from app.services.rbac_service import get_camera_by_name
+
+    # `camera` reaches process_image() straight from a client-supplied query
+    # parameter (/api/recognition/frame?camera=...). Keying the cooldown on that
+    # raw string would let any authenticated account mint a fresh bucket per
+    # request — 60 frames/min through the recognition quota, each one a new
+    # alert fanned out to email, Telegram and Discord. Resolve it against the
+    # registered cameras instead: unregistered names all collapse into one
+    # bucket, so the cooldown holds no matter what the client sends. The label
+    # in the alert text comes from the database for the same reason.
+    cam = get_camera_by_name(db, camera)
+    cam_key = cam.id if cam is not None else "unregistered"
+    cam_label = cam.name if cam is not None else "an unregistered source"
+
+    if not shared_state.cooldown_acquire(
+        f"cooldown:watchlist:{kind}:{ident}:{cam_key}",
+        _WATCHLIST_ALERT_COOLDOWN_SECONDS,
+    ):
+        return
+
+    level = meta.get("level") or "warning"
+    write_audit(
+        db,
+        action="watchlist_match",
+        detail=(
+            f"{subject} matched watchlist '{meta.get('watchlist')}' "
+            f"(level={level}) on camera '{cam_label}'. Reason: {meta.get('reason')}"
+        ),
+    )
+    # The audit row is the forensic record and is written unconditionally; the
+    # notification is the operator-facing channel and is the part that can be
+    # muted.
+    if get_setting(db, "notify_on_watchlist", True):
+        notification_service.create_notification(
+            db,
+            title="Watchlist match",
+            message=f"A watchlisted person was detected on camera '{cam_label}'.",
+            level=level,
+        )
+
+
+def check_watchlist(db: Session, camera: str, user: User | None = None,
+                    embedding=None, threshold: float | None = None,
+                    state: dict | None = None) -> None:
+    """Raise watchlist alerts for a recognized user and/or an unknown face.
+
+    `threshold` governs the unknown-person re-identification only; the employee
+    path needs none, because _match_embedding() already applied it in resolving
+    `user`. Both therefore fire at exactly the configured recognition_threshold
+    — deliberately the same value, since "is this the same face?" is the same
+    question in both cases and a watchlist that triggered at a different
+    similarity than recognition would be confusing to reason about. Defaults to
+    the setting rather than a literal so the two cannot drift apart.
+
+    `state` lets a caller reuse one membership snapshot across every face in a
+    frame; process_image() does exactly that, so the signature query costs one
+    round trip per frame instead of one per face. Omit it and the state is
+    fetched (and cached) here.
+
+    Never raises: a watchlist problem must not take the recognition pipeline
+    down with it. A failure here means a missed alert, which is bad; a failure
+    that propagates means the camera stops recognizing anyone at all, which is
+    worse.
+    """
+    try:
+        state = _get_watchlist_state(db) if state is None else state
+        if user is not None:
+            meta = state["users"].get(user.id)
+            if meta is not None:
+                _raise_watchlist_alert(
+                    db, "user", user.id, meta, camera,
+                    subject=f"Employee '{user.username}' (id={user.id})",
+                )
+            return
+
+        matrix = state["unknown_matrix"]
+        if embedding is None or matrix is None:
+            return
+        if embedding.size != matrix.shape[1]:
+            return
+        if threshold is None:
+            threshold = float(get_setting(db, "recognition_threshold", 0.45))
+        norm = float(np.linalg.norm(embedding))
+        if norm == 0:
+            return
+        scores = matrix @ (embedding / norm)
+        best_idx = int(np.argmax(scores))
+        if float(scores[best_idx]) < threshold:
+            return
+        unknown_id = int(state["unknown_ids"][best_idx])
+        meta = state["unknown_meta"].get(unknown_id)
+        if meta is not None:
+            _raise_watchlist_alert(
+                db, "unknown", unknown_id, meta, camera,
+                subject=f"Unknown person (unknown_face_id={unknown_id})",
+            )
+    except Exception:
+        # Deliberately broad: see the docstring. Logged so a silently missing
+        # alert is still discoverable.
+        logger.exception("Watchlist check failed for camera %r", camera)
+
+
+# ---------------------------------------------------------------------------
 # Snapshot persistence
 # ---------------------------------------------------------------------------
 def _save_unknown_snapshot(img, box) -> str | None:
@@ -413,6 +736,15 @@ def process_image(img, db: Session, camera: str = "webcam",
     liveness_enabled = bool(get_setting(db, "liveness_enabled", False))
     results: list[dict] = []
 
+    # One membership snapshot for the whole frame — see check_watchlist().
+    # Guarded here too: a failure must leave the pipeline running with alerts
+    # disabled for this frame, not abort the frame.
+    try:
+        watchlist_state = _get_watchlist_state(db)
+    except Exception:
+        logger.exception("Watchlist state unavailable for camera %r", camera)
+        watchlist_state = None
+
     if insightface_available():
         faces = _get_insightface_app().get(img)
         # The liveness monitor tracks the dominant (largest) face only
@@ -439,6 +771,11 @@ def process_image(img, db: Session, camera: str = "webcam",
 
             if user is not None and not spoof:
                 _record_recognition(db, user, camera, score)
+                # Outside _record_recognition on purpose: that call is behind a
+                # per-user 30s cooldown, and a watchlist hit must not be
+                # suppressed by an unrelated logging window.
+                if watchlist_state is not None:
+                    check_watchlist(db, camera, user=user, state=watchlist_state)
                 results.append(
                     {
                         "box": box,
@@ -451,6 +788,12 @@ def process_image(img, db: Session, camera: str = "webcam",
             else:
                 if not spoof:
                     _record_unknown(db, img, box, camera, embedding=embedding)
+                    # Same reasoning as the employee branch: _record_unknown is
+                    # behind a per-camera 10s cooldown, and a watchlisted person
+                    # of interest reappearing must not be swallowed by it.
+                    if watchlist_state is not None:
+                        check_watchlist(db, camera, embedding=embedding,
+                                        threshold=threshold, state=watchlist_state)
                 results.append(
                     {
                         "box": box,

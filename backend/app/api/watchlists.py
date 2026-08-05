@@ -12,6 +12,7 @@ from app.schemas.schemas import (
     WatchlistOut,
 )
 from app.services.audit_service import write_audit
+from app.services.face_service import invalidate_watchlist_cache
 
 router = APIRouter(prefix="/api/watchlists", tags=["watchlists"])
 
@@ -74,6 +75,7 @@ def create_watchlist(
     wl = Watchlist(**payload.model_dump())
     db.add(wl)
     db.commit()
+    invalidate_watchlist_cache()
     db.refresh(wl)
     write_audit(db, "watchlist_create", f"Created watchlist '{wl.name}'", user=officer)
     return _serialize_watchlist(wl)
@@ -111,6 +113,7 @@ def add_entry(
     )
     db.add(entry)
     db.commit()
+    invalidate_watchlist_cache()
     db.refresh(entry)
     write_audit(
         db,
@@ -134,6 +137,7 @@ def remove_entry(
         raise HTTPException(status_code=404, detail="Entry not found")
     db.delete(entry)
     db.commit()
+    invalidate_watchlist_cache()
     write_audit(db, "watchlist_entry_remove",
                 f"Removed entry {entry_id} from watchlist {watchlist_id}", user=officer)
     return {"detail": "Entry removed"}
@@ -151,5 +155,6 @@ def delete_watchlist(
     name = wl.name
     db.delete(wl)
     db.commit()
+    invalidate_watchlist_cache()
     write_audit(db, "watchlist_delete", f"Deleted watchlist '{name}'", user=officer)
     return {"detail": "Watchlist deleted"}

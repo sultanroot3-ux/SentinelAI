@@ -462,6 +462,7 @@ class SettingsUpdate(BaseModel):
     liveness_enabled: bool | None = None
     camera_source: str | None = None
     notify_on_unknown: bool | None = None
+    notify_on_watchlist: bool | None = None
 
 
 SettingsMap = dict[str, Any]
