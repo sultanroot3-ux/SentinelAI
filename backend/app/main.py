@@ -130,6 +130,15 @@ async def lifespan(app: FastAPI):
     if not settings.is_production:
         Base.metadata.create_all(bind=engine)
     seed_database()
+    # After seeding, so a fresh production install that just created the default
+    # admin is refused rather than left running on a published password.
+    from app.services.bootstrap_guard import assert_no_bootstrap_credentials
+
+    _guard_db = SessionLocal()
+    try:
+        assert_no_bootstrap_credentials(_guard_db)
+    finally:
+        _guard_db.close()
     # Biometric retention purge (no-op while unknown_retention_days == 0)
     import asyncio
 

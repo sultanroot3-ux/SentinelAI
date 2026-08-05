@@ -28,7 +28,7 @@ from app.models.models import (
     WatchlistEntry,
 )
 from app.services import face_service
-from app.services.settings_service import set_settings
+from app.services.settings_service import DEFAULT_SETTINGS, set_settings
 
 from ai_utils import crop_faces_as_jpeg, require_ai
 
@@ -55,7 +55,16 @@ def _watchlist_env(client, db_session):
     """
     _register_cameras(db_session)
     _reset(db_session)
+    # These tests present still images, which cannot establish liveness. That
+    # interaction is deliberately covered in test_liveness_enforcement.py
+    # (a photo of a watchlisted person must NOT alert); here it would just mask
+    # the watchlist logic under test. Set explicitly rather than relying on the
+    # default — this suite used to pass only because another module leaked
+    # liveness_enabled=False into the shared database, and failed when run
+    # alone.
+    set_settings(db_session, {"liveness_enabled": False})
     yield
+    set_settings(db_session, {"liveness_enabled": DEFAULT_SETTINGS["liveness_enabled"]})
     _reset(db_session)
 
 

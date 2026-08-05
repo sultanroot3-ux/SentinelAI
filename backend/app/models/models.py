@@ -346,6 +346,15 @@ class Notification(Base):
     message: Mapped[str] = mapped_column(Text, nullable=False)
     level: Mapped[str] = mapped_column(String(20), default="info", nullable=False)
     read: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # Roles allowed to see this notification, comma-delimited AND comma-wrapped
+    # (",admin,security_officer,"). NULL means everyone, which is what every
+    # notification type predating this column relies on — so the restriction is
+    # opt-in and nothing existing changes behaviour.
+    #
+    # The wrapping commas are load-bearing: they let the visibility filter match
+    # ",role," as a substring without a bare LIKE '%admin%' also matching a
+    # hypothetical "admin_readonly". See notification_service.audience_filter.
+    audience_roles: Mapped[str | None] = mapped_column(String(200), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=utcnow, index=True, nullable=False
     )

@@ -22,10 +22,21 @@ def test_set_and_get_roundtrip(client, db_session):
 
 
 def test_bool_and_int_types_preserved(client, db_session):
-    set_settings(db_session, {"liveness_enabled": True, "smtp_port": 2525})
-    assert get_setting(db_session, "liveness_enabled") is True
+    set_settings(db_session, {"liveness_enabled": False, "smtp_port": 2525})
+    assert get_setting(db_session, "liveness_enabled") is False
     assert get_setting(db_session, "smtp_port") == 2525
-    set_settings(db_session, {"liveness_enabled": False, "smtp_port": 587})
+    # Restore the DEFAULTS, not arbitrary values. This previously left
+    # liveness_enabled=False behind, and because the suite shares one database
+    # every later module silently ran with anti-spoofing off — the watchlist
+    # suite passed only because of that leak and failed when run alone.
+    set_settings(
+        db_session,
+        {
+            "liveness_enabled": DEFAULT_SETTINGS["liveness_enabled"],
+            "smtp_port": DEFAULT_SETTINGS["smtp_port"],
+        },
+    )
+    assert get_setting(db_session, "liveness_enabled") is True
 
 
 def test_secret_keys_are_known_settings():

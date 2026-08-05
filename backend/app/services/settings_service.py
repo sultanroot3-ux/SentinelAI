@@ -8,7 +8,11 @@ from app.models.models import Setting
 
 DEFAULT_SETTINGS: dict[str, Any] = {
     "recognition_threshold": 0.45,
-    "liveness_enabled": False,
+    # Anti-spoofing enforcement. ON by default: a security control that
+    # ships disabled stays disabled. Recognition then requires an
+    # affirmative liveness pass, which only the temporal monitor in an
+    # analyzed stream can give — see face_service.check_liveness.
+    "liveness_enabled": True,
     "camera_source": "0",
     "notify_on_unknown": True,
     # Watchlist matches raise an in-app/external notification. The audit entry

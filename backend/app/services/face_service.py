@@ -245,11 +245,29 @@ class LivenessMonitor:
 
 
 def check_liveness(image, box) -> dict:
-    """Single-frame API calls have no temporal context: report method honestly.
+    """Verdict for a face with no temporal context: UNKNOWN, never "passed".
 
-    Real temporal liveness runs in the analyzed camera stream (LivenessMonitor).
+    Every liveness signal this system has — blink, non-rigid motion, head-pose
+    micro-motion — needs a sequence of frames. One image cannot supply any of
+    them, and distinguishing a live face from a photograph in a single still
+    requires a dedicated presentation-attack-detection model that is not part
+    of this pipeline.
+
+    This used to return passed=True, which meant enforcement passed anything
+    that came through here: /api/recognition/frame, and every non-dominant face
+    in a stream. Holding a printed photo to the camera produced a recognized
+    identity — and, once watchlists were wired in, a watchlist alert.
+
+    None means "not established", which the enforcement in process_image()
+    treats as unproven rather than proven. Reporting False instead would be
+    equally wrong: nothing here detected a spoof, it simply cannot tell.
     """
-    return {"passed": True, "method": "single-frame"}
+    return {
+        "passed": None,
+        "method": "single-frame",
+        "note": "Liveness not established: a single frame carries no temporal "
+                "evidence.",
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -605,6 +623,11 @@ def _raise_watchlist_alert(db: Session, kind: str, ident: int, meta: dict,
             title="Watchlist match",
             message=f"A watchlisted person was detected on camera '{cam_label}'.",
             level=level,
+            # Delivery is restricted as well as the wording. Withholding the
+            # name bounded the leak but did not close it: "a watchlisted person
+            # was seen on camera X at 14:32" identifies someone to anyone who
+            # can see who walked past that camera at 14:32.
+            audience_roles=notification_service.SECURITY_AUDIENCE,
         )
 
 
@@ -733,7 +756,7 @@ def process_image(img, db: Session, camera: str = "webcam",
     alert notification) for unrecognized faces — both rate-limited.
     """
     threshold = float(get_setting(db, "recognition_threshold", 0.45))
-    liveness_enabled = bool(get_setting(db, "liveness_enabled", False))
+    liveness_enabled = bool(get_setting(db, "liveness_enabled", True))
     results: list[dict] = []
 
     # One membership snapshot for the whole frame — see check_watchlist().
@@ -765,9 +788,14 @@ def process_image(img, db: Session, camera: str = "webcam",
             else:
                 liveness = check_liveness(img, box)
 
-            # With liveness enforcement on, a face that failed the temporal
-            # check is treated as a potential spoof: report it, log nothing.
-            spoof = liveness_enabled and liveness.get("passed") is False
+            # Enforcement is fail-closed: only an affirmative pass counts.
+            # Previously this blocked on `is False` alone, which let both
+            # "unknown" verdicts through — the single-frame path (see
+            # check_liveness) and a monitor still collecting frames. Against a
+            # printed photo those are exactly the verdicts you get, so the check
+            # rejected nothing it was meant to reject. `is not True` means an
+            # unproven face is not a recognized face.
+            spoof = liveness_enabled and liveness.get("passed") is not True
 
             if user is not None and not spoof:
                 _record_recognition(db, user, camera, score)
@@ -798,7 +826,19 @@ def process_image(img, db: Session, camera: str = "webcam",
                     {
                         "box": box,
                         "confidence": confidence,
-                        "match": user if spoof else None,
+                        # No identity on an unverified face. This used to report
+                        # `user` so an operator could see who was impersonated,
+                        # but the stream overlay shows the note instead and
+                        # never reads it — the only consumer was the JSON from
+                        # /api/recognition/frame, which any authenticated role
+                        # can call with an uploaded image. With enforcement on
+                        # that becomes the ordinary path for single frames, so
+                        # returning the name would answer "who is this?" for
+                        # any photo, while writing no RecognitionLog to record
+                        # that the question was asked. Identifying a still image
+                        # is what the role-gated /api/investigation/analyze is
+                        # for.
+                        "match": None,
                         "score": round(score, 4) if score > -1.0 else None,
                         "liveness": liveness,
                         **({"note": "Liveness check failed - possible spoof."} if spoof else {}),

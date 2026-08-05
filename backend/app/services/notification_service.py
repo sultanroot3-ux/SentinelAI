@@ -15,9 +15,11 @@ import logging
 import os
 import smtplib
 import threading
+from collections.abc import Iterable
 from email.mime.text import MIMEText
 
 import requests
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.core.redaction import redact_endpoint, scrub
@@ -60,14 +62,59 @@ def is_valid_discord_webhook(url: str) -> bool:
     return parsed.path.startswith("/api/webhooks/")
 
 
+# Roles that may see security-sensitive alerts. Matches the audit endpoint's
+# gate (app/api/audit.py _AUDIT_ROLES) so "who can see a watchlist match" has
+# one answer rather than two that can drift.
+SECURITY_AUDIENCE: tuple[str, ...] = ("admin", "security_officer")
+
+
+def encode_audience(roles: "Iterable[str] | None") -> str | None:
+    """Encode an audience as the comma-wrapped form the filter expects.
+
+    None (or empty) stays None, meaning "everyone" — the behaviour every
+    notification type had before audiences existed.
+    """
+    if not roles:
+        return None
+    unique = sorted({r.strip() for r in roles if r and r.strip()})
+    if not unique:
+        return None
+    return "," + ",".join(unique) + ","
+
+
+def audience_filter(role: str):
+    """SQLAlchemy predicate: notifications this role is allowed to see.
+
+    Unrestricted rows (NULL) plus rows whose audience contains this exact role.
+    The wrapping commas make the LIKE an exact-token match, so a role name that
+    is a prefix of another cannot slip through.
+    """
+    return or_(
+        Notification.audience_roles.is_(None),
+        Notification.audience_roles.like(f"%,{role},%"),
+    )
+
+
 def create_notification(
     db: Session,
     title: str,
     message: str,
     level: str = "info",
+    audience_roles: "Iterable[str] | None" = None,
 ) -> Notification:
-    """Create an in-app notification and fan out to enabled external channels."""
-    notification = Notification(title=title, message=message, level=level)
+    """Create an in-app notification and fan out to enabled external channels.
+
+    `audience_roles` restricts who may see the in-app row. It does NOT restrict
+    the external fan-out: email/Telegram/Discord destinations are configured
+    once by an admin and are not per-user, so scoping them is not meaningful
+    here — the operator chooses those recipients when they configure a channel.
+    """
+    notification = Notification(
+        title=title,
+        message=message,
+        level=level,
+        audience_roles=encode_audience(audience_roles),
+    )
     db.add(notification)
     db.commit()
     db.refresh(notification)

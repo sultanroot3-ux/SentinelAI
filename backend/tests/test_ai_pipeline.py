@@ -51,6 +51,23 @@ def embeddings(face_jpegs) -> np.ndarray:
 
 
 @pytest.fixture(autouse=True)
+def _liveness_off(client, db_session):
+    """These tests exercise matching and its side effects, not anti-spoofing.
+
+    Fixture images are still frames, which by definition carry no temporal
+    liveness evidence, so with enforcement on (the default) every one of them
+    is correctly treated as unverified and nothing is matched or logged. That
+    behaviour is the subject of test_liveness_enforcement.py; disabling it here
+    keeps these tests measuring what they claim to measure.
+    """
+    from app.services.settings_service import DEFAULT_SETTINGS, set_settings
+
+    set_settings(db_session, {"liveness_enabled": False})
+    yield
+    set_settings(db_session, {"liveness_enabled": DEFAULT_SETTINGS["liveness_enabled"]})
+
+
+@pytest.fixture(autouse=True)
 def _reset_pipeline_state():
     """Cooldowns and the embedding cache are process state — reset per test."""
     face_service.reset_cooldowns()
