@@ -12,13 +12,13 @@
     "e2e:report": "playwright show-report"
   },
   "dependencies": {
-    "react": "^19.2.8",
-    "react-dom": "^19.2.8",
-    "react-router-dom": "^7.18.1"
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "react-router-dom": "^7.18.3"
   },
   "devDependencies": {
-    "@playwright/test": "^1.61.1",
-    "@vitejs/plugin-react": "^6.0.4",
-    "vite": "^8.1.5"
+    "@playwright/test": "^1.63.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "vite": "^8.3.0"
   }
 }
